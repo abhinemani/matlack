@@ -87,6 +87,8 @@ button.primary:hover { color: var(--action-ink); filter: brightness(1.08); }
 button.primary svg { color: inherit; }
 button.quiet { border-color: transparent; background: transparent; color: var(--muted); padding: 4px 6px; }
 button.quiet:hover { color: var(--action); }
+button.link { display: inline; font: inherit; padding: 0; border: 0; border-radius: 2px; background: none; color: var(--action); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--action-rule); cursor: pointer; }
+button.link:hover { text-decoration-color: var(--action); }
 button.small, .btn.small { font-size: 13px; padding: 5px 9px; border-radius: 7px; }
 button.good { color: var(--good); border-color: var(--good-rule); background: var(--good-bg); }
 button.good:hover { color: var(--good); border-color: var(--good); }

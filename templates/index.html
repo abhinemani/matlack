@@ -43,7 +43,7 @@
   </form>
   <p class="watch">
     {% if watching %}Watching <code>{{ inbox }}</code> — files that appear there are picked up automatically.
-    {% else %}Files placed in <code>{{ inbox }}</code> are picked up when you <button class="quiet" onclick="scan()">check the inbox</button> or run <code>python transcribe.py run</code>.{% endif %}
+    {% else %}Files placed in <code>{{ inbox }}</code> are picked up when you <button class="link" onclick="scan()">check the inbox</button> or run <code>python transcribe.py run</code>.{% endif %}
   </p>
 
   {% if meetings %}
