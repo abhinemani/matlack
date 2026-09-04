@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{ m.title }} · Matlack</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/style.css">
@@ -15,45 +15,80 @@
       <span class="brand-name">Matlack</span>
     </a>
     <span class="brand-tag">Meeting transcripts</span>
+    <span class="spacer"></span>
+    <div class="nav"><a href="/">Meetings</a></div>
   </div>
 </nav>
 <header class="top">
   <div>
-    <a class="crumb" href="/">← Meetings</a>
+    <a class="crumb" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>All meetings</a>
     <div class="title-row">
       <h1 id="titleView">{{ m.title }}</h1>
       <button class="icon-btn" onclick="editTitle()" title="Rename meeting" aria-label="Rename meeting">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
     </div>
-    <p class="lede">{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "" }}{% if m.duration_ms %} · {% endif %}{{ m.utterances|length }} lines · <span class="status {{ m.status }}">{{ m.status }}</span></p>
+    <div class="meta">
+      {% if m.duration_ms %}<span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b>{{ store.fmt_ts(m.duration_ms) }}</b></span>{% endif %}
+      <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><b>{{ m.utterances|length }}</b> lines</span>
+      <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg><b id="spCount">{{ m.speakers|length }}</b> speakers</span>
+      <span class="status {{ m.status }}">{{ m.status }}</span>
+    </div>
   </div>
   <div class="toolbar">
-    <span class="saved" id="saved">Saved</span>
-    <a class="btn" href="/t/{{ m.id }}/export.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>Markdown</a>
-    <a class="btn" href="/t/{{ m.id }}/export.docx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5"/></svg>Word</a>
-    <a class="btn" href="/t/{{ m.id }}/export.txt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5M8 13h8M8 17h5"/></svg>Text</a>
+    <span class="saved" id="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Saved</span>
+    <div class="group" role="group" aria-label="Export">
+      <span class="group-label">Export</span>
+      <a class="btn" href="/t/{{ m.id }}/export.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>Markdown</a>
+      <a class="btn" href="/t/{{ m.id }}/export.docx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5"/></svg>Word</a>
+      <a class="btn" href="/t/{{ m.id }}/export.txt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5M8 13h8M8 17h5"/></svg>Text</a>
+    </div>
   </div>
 </header>
 
 <main class="wrap">
   {% if m.error %}<div class="err">{{ m.error }}</div>{% endif %}
   {% if m.status != "ready" and not m.error %}
-    <p class="empty">Still working ({{ m.status }}). This page will refresh.</p>
+    <div class="pending">
+      <span class="status {{ m.status }}">{{ m.status }}</span>
+      <p>Still working on this recording. The page refreshes on its own.</p>
+    </div>
     <script>setTimeout(() => location.reload(), 8000)</script>
   {% else %}
   <div class="layout">
-    <aside class="key">
-      <h2>Who's speaking</h2>
-      <p class="hint">Names in amber are guesses from the conversation. Edit or accept them; changes apply everywhere at once.</p>
-      <div id="speakers"></div>
-      <div class="foot">
-        <button onclick="addSpeaker()">Add a speaker</button>
+    <details class="key" id="key" open>
+      <summary class="key-head">
+        <h2>Who's speaking</h2>
+        <span class="prog" id="prog"></span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+      <div class="key-body">
+        <p class="hint">Amber names are guesses from the conversation. Edit or accept them; changes apply to every line at once.</p>
+        <div id="speakers"></div>
       </div>
-      <audio controls preload="none" src="/t/{{ m.id }}/audio" id="audio"></audio>
-    </aside>
+      <div class="foot">
+        <button class="small" onclick="addSpeaker()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add a speaker</button>
+      </div>
+    </details>
 
-    <section class="stream" id="stream"></section>
+    <div class="stream-wrap">
+      <div class="stream-head">
+        <h2>Transcript</h2>
+        <span class="n" id="lineCount"></span>
+        <label class="find">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="search" id="find" placeholder="Find in transcript" autocomplete="off" oninput="applyFind(this.value)">
+          <span class="hits" id="hits"></span>
+        </label>
+      </div>
+      <section class="stream" id="stream"></section>
+    </div>
+  </div>
+
+  <div class="player">
+    <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></svg></span>
+    <div class="meta-col"><b>{{ m.title }}</b><span>Click a timestamp to jump</span></div>
+    <audio controls preload="none" src="/t/{{ m.id }}/audio" id="audio"></audio>
   </div>
   {% endif %}
 </main>
@@ -80,7 +115,7 @@ function fmt(ms) {
   const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
   return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(sec).padStart(2, '0');
 }
-function esc(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 let saveTimer;
 function flashSaved() {
@@ -105,20 +140,21 @@ function renderKey() {
   const labels = Object.keys(meeting.speakers).sort();
   const counts = {};
   meeting.utterances.forEach(u => counts[u.speaker] = (counts[u.speaker] || 0) + 1);
+  const check = '<span class="ok" title="Confirmed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg></span>';
   document.getElementById('speakers').innerHTML = labels.map(l => {
     const sp = meeting.speakers[l];
     const others = labels.filter(o => o !== l);
     const guess = !sp.confirmed && sp.guess
-      ? `<div class="guess"><b>Guess (${sp.confidence || 'low'})</b>${sp.evidence ? ' — ' + esc(sp.evidence) : ''}</div>` : '';
+      ? `<div class="guess"><b>Guess (${esc(sp.confidence || 'low')})</b>${sp.evidence ? ' — ' + esc(sp.evidence) : ''}</div>` : '';
     return `<div class="sp" style="--c:${color(l)}">
       <div class="chip">${esc(initialOf(l))}</div>
-      <div>
-        <div class="label">Speaker ${l} <span class="lines">${counts[l] || 0} lines</span></div>
+      <div style="min-width:0">
+        <div class="label">Speaker ${l} ${sp.confirmed ? check : ''}<span class="lines">${counts[l] || 0} line${counts[l] === 1 ? '' : 's'}</span></div>
         <input type="text" value="${esc(sp.name || sp.guess || '')}" placeholder="Name"
                onchange="rename('${l}', this.value)">
         ${guess}
         <div class="row">
-          ${!sp.confirmed && sp.guess ? `<button class="quiet" onclick="confirmSp('${l}')">Accept</button>` : ''}
+          ${!sp.confirmed && sp.guess ? `<button class="small good" onclick="confirmSp('${l}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Accept</button>` : ''}
           ${others.length ? `<select onchange="if(this.value){merge('${l}', this.value)}">
              <option value="">Merge into…</option>
              ${others.map(o => `<option value="${o}">${esc(nameOf(o))}</option>`).join('')}
@@ -127,25 +163,55 @@ function renderKey() {
       </div>
     </div>`;
   }).join('');
+
+  const done = labels.filter(l => meeting.speakers[l].confirmed).length;
+  const prog = document.getElementById('prog');
+  prog.textContent = labels.length ? `${done} of ${labels.length} confirmed` : '';
+  prog.classList.toggle('done', labels.length > 0 && done === labels.length);
+  document.getElementById('spCount').textContent = labels.length;
+}
+
+let query = '';
+function highlight(text) {
+  if (!query) return esc(text);
+  const q = query.toLowerCase();
+  let out = '', i = 0, lower = text.toLowerCase(), j;
+  while ((j = lower.indexOf(q, i)) !== -1) {
+    out += esc(text.slice(i, j)) + '<mark>' + esc(text.slice(j, j + q.length)) + '</mark>';
+    i = j + q.length;
+  }
+  return out + esc(text.slice(i));
 }
 
 function renderStream() {
   const labels = Object.keys(meeting.speakers).sort();
-  let prev = null;
-  document.getElementById('stream').innerHTML = meeting.utterances.map((u, i) => {
-    const same = u.speaker === prev; prev = u.speaker;
+  const q = query.toLowerCase();
+  let prev = null, shown = 0;
+  const html = meeting.utterances.map((u, i) => {
+    const same = u.speaker === prev && !q; prev = u.speaker;
+    const hit = !q || u.text.toLowerCase().includes(q) || nameOf(u.speaker).toLowerCase().includes(q);
+    if (hit) shown++;
     const opts = labels.map(l => `<option value="${l}" ${l === u.speaker ? 'selected' : ''}>${esc(nameOf(l))}</option>`).join('');
-    return `<div class="u ${same ? 'same' : ''}" style="--c:${color(u.speaker)}" data-i="${i}">
+    return `<div class="u ${same ? 'same' : ''} ${hit ? '' : 'hide'}" style="--c:${color(u.speaker)}" data-i="${i}" data-start="${u.start}" data-end="${u.end ?? ''}">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3.5-6 7-6s7 2.5 7 6"/></svg></div>
-      <div class="t"><a href="#" onclick="seek(${u.start});return false">${fmt(u.start)}</a></div>
+      <div class="t"><a href="#" title="Play from here" onclick="seek(${u.start});return false">${fmt(u.start)}</a></div>
       <div class="body">
-        <div class="name"><select onchange="reassign(${i}, this.value)">${opts}</select></div>
-        <div class="text" contenteditable="plaintext-only" onblur="editText(${i}, this.innerText)">${esc(u.text)}</div>
+        <div class="name"><select aria-label="Speaker for this line" onchange="reassign(${i}, this.value)">${opts}</select></div>
+        <div class="text" contenteditable="plaintext-only" spellcheck="false" onblur="editText(${i}, this.innerText)">${highlight(u.text)}</div>
       </div>
     </div>`;
   }).join('');
+  document.getElementById('stream').innerHTML = html + (shown ? '' : `<p class="none">No lines match “${esc(query)}”.</p>`);
+  document.getElementById('lineCount').textContent = q ? `${shown} of ${meeting.utterances.length}` : `${meeting.utterances.length} lines`;
+  document.getElementById('hits').textContent = q ? `${shown}` : '';
 }
 function render() { renderKey(); renderStream(); }
+
+let findTimer;
+function applyFind(v) {
+  clearTimeout(findTimer);
+  findTimer = setTimeout(() => { query = v.trim(); renderStream(); }, 120);
+}
 
 async function rename(label, name) {
   meeting.speakers = await api(`/speakers/${label}`, {name});
@@ -180,6 +246,22 @@ async function addSpeaker() {
 }
 function seek(ms) { const a = document.getElementById('audio'); a.currentTime = ms / 1000; a.play(); }
 
+// Follow playback: mark the line that is currently being spoken.
+(function () {
+  const a = document.getElementById('audio');
+  if (!a) return;
+  let cur = null;
+  a.addEventListener('timeupdate', () => {
+    const ms = a.currentTime * 1000;
+    const rows = document.querySelectorAll('.u[data-start]');
+    let next = null;
+    for (const r of rows) { if (parseFloat(r.dataset.start) <= ms) next = r; else break; }
+    if (next === cur) return;
+    if (cur) cur.classList.remove('playing');
+    cur = next; if (cur) cur.classList.add('playing');
+  });
+})();
+
 function editTitle() {
   const h1 = document.getElementById('titleView');
   if (!h1) return;
@@ -195,6 +277,7 @@ function editTitle() {
     if (val && val !== current) {
       meeting.title = val;
       document.title = val + ' · Matlack';
+      const pb = document.querySelector('.player .meta-col b'); if (pb) pb.textContent = val;
       await api('/rename', {title: val});
     }
     const h1new = document.createElement('h1');
@@ -208,7 +291,15 @@ function editTitle() {
   input.addEventListener('blur', commit);
 }
 
-if (meeting.status === 'ready') render();
+if (meeting.status === 'ready') {
+  render();
+  // On a phone the speaker panel sits above the transcript; start it folded
+  // once every speaker is confirmed so the text comes first.
+  const key = document.getElementById('key');
+  const allDone = Object.values(meeting.speakers).every(s => s.confirmed);
+  const w = document.documentElement.clientWidth;
+  if (key && allDone && w > 0 && w <= 820) key.open = false;
+}
 </script>
 </body>
 </html>

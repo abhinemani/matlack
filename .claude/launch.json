@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["serve.py"],
       "port": 8000
+    },
+    {
+      "name": "editor-8001",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["PORT=8001", ".venv/bin/python", "serve.py"],
+      "port": 8001
     }
   ]
 }
