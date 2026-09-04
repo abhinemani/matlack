@@ -131,6 +131,18 @@ def api_meeting(mid: str):
     return _meeting_or_404(mid)
 
 
+@app.post("/api/meetings/{mid}/rename", dependencies=[Depends(auth)])
+async def api_rename_meeting(mid: str, request: Request):
+    _meeting_or_404(mid)
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "title required")
+    m = store.rename_meeting(mid, title)
+    export.write(m, "md")
+    return {"title": m["title"]}
+
+
 @app.post("/api/meetings/{mid}/retry", dependencies=[Depends(auth)])
 def api_retry(mid: str):
     _meeting_or_404(mid)

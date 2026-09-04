@@ -113,6 +113,12 @@ def create_from_file(src: Path, move: bool = True) -> dict:
     return save(meeting)
 
 
+def rename_meeting(mid: str, title: str) -> dict:
+    m = load(mid)
+    m["title"] = title.strip() or m["title"]
+    return save(m)
+
+
 def set_status(mid: str, status: str, error: str | None = None, **extra) -> dict:
     m = load(mid)
     m["status"] = status

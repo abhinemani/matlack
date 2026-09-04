@@ -3,21 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ m.title }}</title>
+<title>{{ m.title }} · Matlack</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<nav class="brand-bar">
+  <div class="brand-bar-inner">
+    <a class="brand" href="/">
+      <img class="brand-mark" src="/static/favicon.svg" alt="">
+      <span class="brand-name">Matlack</span>
+    </a>
+    <span class="brand-tag">Meeting transcripts</span>
+  </div>
+</nav>
 <header class="top">
   <div>
     <a class="crumb" href="/">← Meetings</a>
-    <h1>{{ m.title }}</h1>
+    <div class="title-row">
+      <h1 id="titleView">{{ m.title }}</h1>
+      <button class="icon-btn" onclick="editTitle()" title="Rename meeting" aria-label="Rename meeting">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+    </div>
     <p class="lede">{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "" }}{% if m.duration_ms %} · {% endif %}{{ m.utterances|length }} lines · <span class="status {{ m.status }}">{{ m.status }}</span></p>
   </div>
   <div class="toolbar">
     <span class="saved" id="saved">Saved</span>
-    <a class="btn" href="/t/{{ m.id }}/export.md">Markdown</a>
-    <a class="btn" href="/t/{{ m.id }}/export.docx">Word</a>
-    <a class="btn" href="/t/{{ m.id }}/export.txt">Text</a>
+    <a class="btn" href="/t/{{ m.id }}/export.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>Markdown</a>
+    <a class="btn" href="/t/{{ m.id }}/export.docx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5"/></svg>Word</a>
+    <a class="btn" href="/t/{{ m.id }}/export.txt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5M8 13h8M8 17h5"/></svg>Text</a>
   </div>
 </header>
 
@@ -81,6 +96,11 @@ async function api(path, body, method = 'POST') {
   return r.json();
 }
 
+function initialOf(label) {
+  const n = nameOf(label);
+  return (n.startsWith('Speaker ') ? label : n[0] || label).toUpperCase();
+}
+
 function renderKey() {
   const labels = Object.keys(meeting.speakers).sort();
   const counts = {};
@@ -91,7 +111,7 @@ function renderKey() {
     const guess = !sp.confirmed && sp.guess
       ? `<div class="guess"><b>Guess (${sp.confidence || 'low'})</b>${sp.evidence ? ' — ' + esc(sp.evidence) : ''}</div>` : '';
     return `<div class="sp" style="--c:${color(l)}">
-      <div class="chip"></div>
+      <div class="chip">${esc(initialOf(l))}</div>
       <div>
         <div class="label">Speaker ${l} <span class="lines">${counts[l] || 0} lines</span></div>
         <input type="text" value="${esc(sp.name || sp.guess || '')}" placeholder="Name"
@@ -116,7 +136,7 @@ function renderStream() {
     const same = u.speaker === prev; prev = u.speaker;
     const opts = labels.map(l => `<option value="${l}" ${l === u.speaker ? 'selected' : ''}>${esc(nameOf(l))}</option>`).join('');
     return `<div class="u ${same ? 'same' : ''}" style="--c:${color(u.speaker)}" data-i="${i}">
-      <div class="rail"></div>
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3.5-6 7-6s7 2.5 7 6"/></svg></div>
       <div class="t"><a href="#" onclick="seek(${u.start});return false">${fmt(u.start)}</a></div>
       <div class="body">
         <div class="name"><select onchange="reassign(${i}, this.value)">${opts}</select></div>
@@ -159,6 +179,34 @@ async function addSpeaker() {
   render();
 }
 function seek(ms) { const a = document.getElementById('audio'); a.currentTime = ms / 1000; a.play(); }
+
+function editTitle() {
+  const h1 = document.getElementById('titleView');
+  if (!h1) return;
+  const current = meeting.title;
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = current; input.className = 'title-edit'; input.id = 'titleView';
+  h1.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const commit = async () => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    if (val && val !== current) {
+      meeting.title = val;
+      document.title = val + ' · Matlack';
+      await api('/rename', {title: val});
+    }
+    const h1new = document.createElement('h1');
+    h1new.id = 'titleView'; h1new.textContent = meeting.title;
+    input.replaceWith(h1new);
+  };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { done = true; const h1new = document.createElement('h1'); h1new.id = 'titleView'; h1new.textContent = current; input.replaceWith(h1new); }
+  });
+  input.addEventListener('blur', commit);
+}
 
 if (meeting.status === 'ready') render();
 </script>

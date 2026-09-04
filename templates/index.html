@@ -3,21 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meetings</title>
+<title>Meetings · Matlack</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<nav class="brand-bar">
+  <div class="brand-bar-inner">
+    <a class="brand" href="/">
+      <img class="brand-mark" src="/static/favicon.svg" alt="">
+      <span class="brand-name">Matlack</span>
+    </a>
+    <span class="brand-tag">Meeting transcripts</span>
+  </div>
+</nav>
 <header class="top">
   <div>
-    <h1>Meetings</h1>
+    <div class="h1-row"><h1>Meetings</h1>{% if meetings %}<span class="count">{{ meetings|length }}</span>{% endif %}</div>
     <p class="lede">Drop recordings here or in the inbox folder. Each one comes back with speakers guessed from what was said, ready for you to confirm.</p>
   </div>
 </header>
 
 <main class="wrap">
   <form id="upload" class="drop" action="/upload" method="post" enctype="multipart/form-data">
-    <p>Drag audio files onto this box, or choose them.
-      <small>m4a, mp3, wav, mp4. Several at once is fine; they run in parallel.</small></p>
+    <div class="copy">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#9a5b12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      </div>
+      <p>Drag audio files onto this box, or choose them.
+        <small>m4a, mp3, wav, mp4. Several at once is fine; they run in parallel.</small></p>
+    </div>
     <div>
       <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
       <button type="button" class="primary" onclick="document.getElementById('files').click()">Choose files</button>
@@ -29,23 +44,34 @@
   </p>
 
   {% if meetings %}
+  <div class="table-scroll">
   <table class="meetings" id="list">
     <thead><tr><th>Meeting</th><th>Speakers</th><th>Length</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for m in meetings %}
       <tr data-id="{{ m.id }}">
-        <td class="title"><a href="/t/{{ m.id }}">{{ m.title }}</a></td>
+        <td class="title">
+          <div class="title-cell">
+            <span class="avatar" style="--c:var(--sp-{{ 'ABCDEFGHIJKL'[loop.index0 % 12] }})">{{ m.title[0]|upper }}</span>
+            <div>
+              <a href="/t/{{ m.id }}">{{ m.title }}</a>
+              <div class="when" data-created="{{ m.created }}"></div>
+            </div>
+          </div>
+        </td>
         <td class="who">{% for label, sp in m.speakers|dictsort %}{{ sp.name or sp.guess or ('Speaker ' ~ label) }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
         <td>{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "" }}</td>
         <td><span class="status {{ m.status }}">{{ m.status }}{% if m.error %} · {{ m.error[:80] }}{% endif %}</span></td>
         <td class="actions">
           {% if m.status == "error" %}<button class="quiet" onclick="retry('{{ m.id }}')">Retry</button>{% endif %}
+          <button class="quiet" onclick="rename('{{ m.id }}', '{{ m.title|e }}')">Rename</button>
           <button class="quiet" onclick="remove('{{ m.id }}', '{{ m.title|e }}')">Delete</button>
         </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="empty">No meetings yet. Add a recording above to start.</p>
   {% endif %}
@@ -60,11 +86,31 @@ input.addEventListener('change', () => { if (input.files.length) form.submit(); 
 form.addEventListener('drop', ev => { input.files = ev.dataTransfer.files; form.submit(); });
 
 async function retry(id) { await fetch(`/api/meetings/${id}/retry`, {method:'POST'}); location.reload(); }
+async function rename(id, title) {
+  const next = prompt('Rename meeting:', title);
+  if (!next || !next.trim() || next.trim() === title) return;
+  await fetch(`/api/meetings/${id}/rename`, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title: next.trim()})});
+  location.reload();
+}
 async function remove(id, title) {
   if (!confirm(`Delete "${title}" and its audio? This can't be undone.`)) return;
   await fetch(`/api/meetings/${id}`, {method:'DELETE'}); location.reload();
 }
 async function scan() { await fetch('/api/meetings/inbox/scan', {method:'POST'}); location.reload(); }
+
+// Relative "added" time under each title.
+function timeAgo(ts) {
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+document.querySelectorAll('.when[data-created]').forEach(el => {
+  const ts = parseFloat(el.dataset.created);
+  if (ts) el.textContent = timeAgo(ts);
+});
 
 // While anything is in progress, refresh the list quietly.
 const busy = [...document.querySelectorAll('.status')].some(s => !/ready|error/.test(s.className));
