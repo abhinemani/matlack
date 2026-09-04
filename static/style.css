@@ -104,6 +104,8 @@ select:hover { border-color: var(--action); }
 .group .btn { border: 0; border-radius: 0; box-shadow: none; }
 .group .btn + .btn { border-left: 1px solid var(--rule-soft); }
 .group .btn:hover { background: var(--page); }
+.group .btn.good { background: var(--good-bg); color: var(--good); }
+.group .btn.good svg { color: inherit; }
 .group-label { color: var(--muted); font-size: 12.5px; font-weight: 500; padding: 0 10px; display: inline-flex; align-items: center; border-right: 1px solid var(--rule-soft); background: var(--paper-2); }
 
 /* ---- inbox page ---- */
@@ -219,7 +221,11 @@ select:hover { border-color: var(--action); }
 .u.playing { box-shadow: inset 3px 0 0 var(--c); }
 .stream .none { padding: 36px 20px; color: var(--muted); text-align: center; }
 
-.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.toolbar > * { flex: none; }
+.btn.primary { background: var(--action); border-color: var(--action); color: var(--action-ink); box-shadow: var(--shadow-sm); }
+.btn.primary:hover { color: var(--action-ink); filter: brightness(1.08); }
+.btn.primary svg { color: inherit; }
 .saved { color: var(--good); font-size: 13px; font-weight: 500; opacity: 0; transition: opacity .2s; display: inline-flex; align-items: center; gap: 5px; }
 .saved svg { width: 13px; height: 13px; }
 .saved.show { opacity: 1; }
@@ -247,9 +253,12 @@ select:hover { border-color: var(--action); }
   input.title-edit { font-size: 24px; }
   .brand-tag { display: none; }
   .top { padding-top: 22px; padding-bottom: 14px; align-items: flex-start; }
-  .top .toolbar { width: 100%; }
-  .group { width: 100%; }
-  .group .btn { flex: 1; justify-content: center; }
+  .top .toolbar { width: 100%; justify-content: stretch; }
+  .toolbar > .primary { flex: 1 1 100%; order: -1; justify-content: center; }
+  .toolbar > .group { flex: 1 1 auto; }
+  .toolbar > .saved { display: none; }
+  .group .group-label { display: none; }
+  .group .btn { flex: 1; justify-content: center; padding-left: 6px; padding-right: 6px; }
   .icon-btn { opacity: 1; }
 
   .list .cols { display: none; }

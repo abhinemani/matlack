@@ -32,12 +32,14 @@
   </div>
   <div class="toolbar" id="toolbar">
     <span class="saved" id="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Saved</span>
+    <button id="regen" hidden onclick="generate(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>Regenerate</button>
     <div class="group" role="group" aria-label="Export" id="exports" hidden>
       <span class="group-label">Export</span>
+      <button class="btn" id="copyBtn" onclick="copySummary()" title="Copy the summary as plain text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
       <a class="btn" href="/t/{{ m.id }}/summary.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>Markdown</a>
       <a class="btn" href="/t/{{ m.id }}/summary.docx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5"/></svg>Word</a>
     </div>
-    <button id="regen" hidden onclick="generate(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>Regenerate</button>
+    <a class="btn primary" href="/t/{{ m.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Transcript</a>
   </div>
 </header>
 
@@ -156,6 +158,38 @@ async function generate(again) {
   summary = {status: 'running', guide, guide_title: (guides.find(g => g.id === guide) || {}).title};
   render();
   await api('/summarize', {guide});
+}
+
+// Plain-text version of the summary, mirroring the Markdown export.
+function summaryText() {
+  const title = {{ m.title|tojson }};
+  const out = [title + ' — ' + (summary.guide_title || 'Summary'), ''];
+  if (summary.overview) out.push('OVERVIEW', '', summary.overview, '');
+  if (summary.priorities?.length) out.push('TOP PRIORITIES', '', ...summary.priorities.map((p, i) => `${i + 1}. ${p}`), '');
+  for (const s of summary.sections || []) {
+    out.push(s.title.toUpperCase(), '', s.question, '');
+    if (!(s.covered || s.summary)) { out.push('Not discussed.', ''); continue; }
+    if (s.summary) out.push(s.summary, '');
+    if (s.points?.length) out.push(...s.points.map(p => `- ${p}`), '');
+    for (const q of s.quotes || []) out.push(`> “${q.text}”${q.speaker ? ' — ' + q.speaker : ''}${q.time ? ` (${q.time})` : ''}`, '');
+  }
+  if (summary.follow_ups?.length) out.push('FOLLOW-UPS', '', ...summary.follow_ups.map(p => `- ${p}`), '');
+  return out.join('\n').trim() + '\n';
+}
+async function copySummary() {
+  const btn = document.getElementById('copyBtn'), label = btn.querySelector('span');
+  const text = summaryText();
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { /* fall through */ }
+  if (!ok) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+  }
+  label.textContent = ok ? 'Copied' : 'Copy failed'; btn.classList.toggle('good', ok);
+  setTimeout(() => { label.textContent = 'Copy'; btn.classList.remove('good'); }, 1600);
 }
 
 function itemsOf(el) { return [...el.querySelectorAll('li')].map(li => li.innerText.trim()).filter(Boolean); }
