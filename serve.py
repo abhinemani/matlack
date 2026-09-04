@@ -23,7 +23,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from fastapi.templating import Jinja2Templates  # noqa: E402
 
-from transcriber import export, pipeline, store  # noqa: E402
+from transcriber import export, pipeline, store, summarize  # noqa: E402
 
 HERE = Path(__file__).parent
 WORKERS = int(os.environ.get("WORKERS", "3"))
@@ -59,7 +59,8 @@ def _meeting_or_404(mid: str) -> dict:
 def _public(m: dict) -> dict:
     return {k: m[k] for k in ("id", "title", "status", "error", "created", "updated",
                               "duration_ms", "speakers") if k in m} | {
-        "n_utterances": len(m.get("utterances", []))}
+        "n_utterances": len(m.get("utterances", [])),
+        "summary_status": (m.get("summary") or {}).get("status")}
 
 
 def start_watcher() -> None:
@@ -99,6 +100,16 @@ def transcript_page(request: Request, mid: str):
     payload = json.dumps(m, ensure_ascii=False).replace("</", "<\\/")
     return templates.TemplateResponse(request, "transcript.html",
                                       {"m": m, "meeting_json": payload, "store": store})
+
+
+@app.get("/t/{mid}/summary", response_class=HTMLResponse, dependencies=[Depends(auth)])
+def summary_page(request: Request, mid: str):
+    m = _meeting_or_404(mid)
+    payload = json.dumps(m.get("summary") or {}, ensure_ascii=False).replace("</", "<\\/")
+    return templates.TemplateResponse(request, "summary.html", {
+        "m": m, "summary_json": payload, "store": store,
+        "guides": summarize.list_guides(), "default_guide": summarize.DEFAULT_GUIDE,
+    })
 
 
 # --- api ---------------------------------------------------------------------
@@ -221,6 +232,70 @@ def api_export(mid: str, fmt: str):
     if fmt == "docx":
         p = export.write(m, "docx")
         return FileResponse(p, filename=f"{mid}.docx")
+    raise HTTPException(404)
+
+
+# --- summaries ---------------------------------------------------------------
+@app.get("/api/meetings/{mid}/summary", dependencies=[Depends(auth)])
+def api_summary(mid: str):
+    return _meeting_or_404(mid).get("summary") or {"status": "none"}
+
+
+@app.post("/api/meetings/{mid}/summarize", dependencies=[Depends(auth)])
+async def api_summarize(mid: str, request: Request):
+    m = _meeting_or_404(mid)
+    if m["status"] != "ready":
+        raise HTTPException(400, "transcript is not ready")
+    if (m.get("summary") or {}).get("status") == "running":
+        return {"ok": True, "status": "running"}
+    body = await request.json() if int(request.headers.get("content-length") or 0) else {}
+    gid = (body.get("guide") or "").strip() or None
+    try:
+        summarize.load_guide(gid)
+    except FileNotFoundError as e:
+        raise HTTPException(400, str(e))
+
+    def job():
+        try:
+            summarize.run(mid, gid)
+        except Exception as e:
+            pipeline.log(f"[{mid}] summary failed: {e}")
+    _executor.submit(job)
+    return {"ok": True, "status": "running"}
+
+
+@app.post("/api/meetings/{mid}/summary/sections/{sid}", dependencies=[Depends(auth)])
+async def api_summary_section(mid: str, sid: str, request: Request):
+    _meeting_or_404(mid)
+    body = await request.json()
+    try:
+        m = summarize.edit_section(mid, sid, body.get("summary"), body.get("points"))
+    except KeyError:
+        raise HTTPException(404, "no such section")
+    return {"ok": True}
+
+
+@app.post("/api/meetings/{mid}/summary/fields/{field}", dependencies=[Depends(auth)])
+async def api_summary_field(mid: str, field: str, request: Request):
+    _meeting_or_404(mid)
+    body = await request.json()
+    try:
+        summarize.edit_field(mid, field, body.get("value"))
+    except KeyError:
+        raise HTTPException(404, "no such field")
+    return {"ok": True}
+
+
+@app.get("/t/{mid}/summary.{fmt}", dependencies=[Depends(auth)])
+def api_summary_export(mid: str, fmt: str):
+    m = _meeting_or_404(mid)
+    if (m.get("summary") or {}).get("status") != "ready":
+        raise HTTPException(404, "no summary yet")
+    if fmt == "md":
+        return PlainTextResponse(export.summary_to_markdown(m), media_type="text/markdown",
+                                 headers={"Content-Disposition": f'attachment; filename="{mid}-summary.md"'})
+    if fmt == "docx":
+        return FileResponse(export.write_summary(m, "docx"), filename=f"{mid}-summary.docx")
     raise HTTPException(404)
 
 

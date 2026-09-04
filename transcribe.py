@@ -11,6 +11,10 @@
   python transcribe.py merge <id> C B       # C was really B
   python transcribe.py reassign <id> 42 A   # utterance #42 belongs to A
   python transcribe.py export <id> --format docx
+  python transcribe.py summarize <id>           # organized summary following guides/efficiency-review.md
+  python transcribe.py summarize <id> --guide other-guide
+  python transcribe.py export <id> --summary --format docx
+  python transcribe.py guides                   # list interview guides
   python transcribe.py retry <id>
 """
 from __future__ import annotations
@@ -22,7 +26,7 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from transcriber import export, pipeline, store  # noqa: E402
+from transcriber import export, pipeline, store, summarize  # noqa: E402
 
 
 def cmd_run(a):
@@ -106,8 +110,34 @@ def cmd_reassign(a):
 
 
 def cmd_export(a):
-    p = export.write(store.load(a.id), a.format)
+    m = store.load(a.id)
+    if a.summary:
+        if a.format == "txt":
+            sys.exit("summaries export as md or docx")
+        p = export.write_summary(m, a.format)
+    else:
+        p = export.write(m, a.format)
     print(p)
+
+
+def cmd_summarize(a):
+    m = store.load(a.id)
+    if m["status"] != "ready":
+        sys.exit(f"{a.id} is not transcribed yet (status: {m['status']})")
+    guide = summarize.load_guide(a.guide)
+    print(f"Summarizing {m['title']} with “{guide['title']}” ({summarize.MODEL})…")
+    m = summarize.run(a.id, a.guide)
+    s = m["summary"]
+    print(f"done: {sum(1 for x in s['sections'] if x['covered'])} of {len(s['sections'])} sections covered, "
+          f"about {s.get('words', 0)} words")
+    print(export.write_summary(m, "md"))
+    if a.docx:
+        print(export.write_summary(m, "docx"))
+
+
+def cmd_guides(a):
+    for g in summarize.list_guides():
+        print(f"{g['id']:30} {g['title']}  ({g['sections']} sections)")
 
 
 def cmd_retry(a):
@@ -159,7 +189,16 @@ def main(argv=None):
     s.add_argument("label"); s.set_defaults(fn=cmd_reassign)
 
     s = sub.add_parser("export"); s.add_argument("id")
-    s.add_argument("--format", choices=["md", "txt", "docx"], default="md"); s.set_defaults(fn=cmd_export)
+    s.add_argument("--format", choices=["md", "txt", "docx"], default="md")
+    s.add_argument("--summary", action="store_true", help="export the summary instead of the transcript")
+    s.set_defaults(fn=cmd_export)
+
+    s = sub.add_parser("summarize", help="organized summary following an interview guide")
+    s.add_argument("id"); s.add_argument("--guide", default=None, help="guide id from guides/ (default: efficiency-review)")
+    s.add_argument("--docx", action="store_true", help="also write a Word version")
+    s.set_defaults(fn=cmd_summarize)
+
+    sub.add_parser("guides", help="list interview guides").set_defaults(fn=cmd_guides)
 
     s = sub.add_parser("retry"); s.add_argument("id"); s.set_defaults(fn=cmd_retry)
 

@@ -61,7 +61,7 @@
           <div class="title-cell">
             <span class="avatar" style="--c:var(--sp-{{ 'ABCDEFGHIJKL'[loop.index0 % 12] }})">{{ m.title[0]|upper }}</span>
             <div style="min-width:0">
-              <a class="name" href="/t/{{ m.id }}">{{ m.title }}</a>
+              <a class="name" href="/t/{{ m.id }}">{{ m.title }}</a>{% if m.summary_status == 'ready' %}<a class="chip-sum" href="/t/{{ m.id }}/summary" title="Open summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Summary</a>{% endif %}
               <div class="when" data-created="{{ m.created }}"></div>
             </div>
           </div>

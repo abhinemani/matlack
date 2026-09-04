@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ m.title }} · Summary · Matlack</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="brand-bar">
+  <div class="brand-bar-inner">
+    <a class="brand" href="/">
+      <img class="brand-mark" src="/static/favicon.svg" alt="">
+      <span class="brand-name">Matlack</span>
+    </a>
+    <span class="brand-tag">Meeting transcripts</span>
+    <span class="spacer"></span>
+    <div class="nav"><a href="/">Meetings</a></div>
+  </div>
+</nav>
+<header class="top">
+  <div>
+    <a class="crumb" href="/t/{{ m.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Transcript</a>
+    <div class="title-row"><h1>{{ m.title }}</h1></div>
+    <div class="meta" id="meta">
+      <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><b id="guideName">{{ (m.summary or {}).get('guide_title') or 'Summary' }}</b></span>
+      {% if m.duration_ms %}<span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b>{{ store.fmt_ts(m.duration_ms) }}</b></span>{% endif %}
+      <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg>{% for label, sp in m.speakers|dictsort %}{{ store.display_name(m, label) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      <span class="item" id="coverage" hidden></span>
+    </div>
+  </div>
+  <div class="toolbar" id="toolbar">
+    <span class="saved" id="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Saved</span>
+    <div class="group" role="group" aria-label="Export" id="exports" hidden>
+      <span class="group-label">Export</span>
+      <a class="btn" href="/t/{{ m.id }}/summary.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>Markdown</a>
+      <a class="btn" href="/t/{{ m.id }}/summary.docx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M15 3v5h5"/></svg>Word</a>
+    </div>
+    <button id="regen" hidden onclick="generate(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>Regenerate</button>
+  </div>
+</header>
+
+<main class="wrap">
+  {% if m.status != "ready" %}
+    <div class="pending"><span class="status {{ m.status }}">{{ m.status }}</span><p>The transcript has to finish before it can be summarized.</p></div>
+  {% else %}
+  <div id="root"></div>
+  {% endif %}
+</main>
+
+<script>
+const mid = {{ m.id|tojson }};
+const guides = {{ guides|tojson }};
+const defaultGuide = {{ default_guide|tojson }};
+let summary = {{ summary_json|safe }};
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let saveTimer;
+function flashSaved() {
+  const el = document.getElementById('saved');
+  el.classList.add('show'); clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => el.classList.remove('show'), 1500);
+}
+async function api(path, body) {
+  const r = await fetch(`/api/meetings/${mid}${path}`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  if (!r.ok) { alert('That didn\'t save: ' + (await r.text())); throw new Error(); }
+  return r.json();
+}
+
+function guidePicker(id) {
+  if (guides.length <= 1) return `<input type="hidden" id="${id}" value="${esc(guides[0]?.id || defaultGuide)}">`;
+  return `<select id="${id}">${guides.map(g => `<option value="${esc(g.id)}" ${g.id === defaultGuide ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select>`;
+}
+
+function renderEmpty() {
+  const g = guides.find(x => x.id === defaultGuide) || guides[0];
+  return `<div class="start">
+    <div class="start-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>
+    <h2 class="start-h">No summary yet</h2>
+    <p>Claude reads the whole transcript and files what was said under each question in the interview guide, cleaned up, with supporting quotes and timestamps. ${g ? `The guide has <b>${g.sections} sections</b>.` : ''}</p>
+    <div class="start-row">${guidePicker('guide')}<button class="primary" onclick="generate(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Generate summary</button></div>
+    <p class="start-note">Takes a minute or two. Edit the guide in <code>guides/</code> to change the questions.</p>
+  </div>`;
+}
+
+function renderRunning() {
+  return `<div class="start">
+    <span class="status naming">summarizing</span>
+    <h2 class="start-h">Reading the transcript</h2>
+    <p>Organizing answers under each question in “${esc(summary.guide_title || 'the guide')}”. This page updates on its own.</p>
+  </div>`;
+}
+
+function renderError() {
+  return `<div class="start">
+    <span class="status error">error</span>
+    <h2 class="start-h">The summary didn't finish</h2>
+    <div class="err">${esc(summary.error)}</div>
+    <div class="start-row">${guidePicker('guide')}<button class="primary" onclick="generate(false)">Try again</button></div>
+  </div>`;
+}
+
+function renderReady() {
+  const secs = summary.sections || [];
+  const covered = secs.filter(s => s.covered).length;
+  const toc = secs.map((s, i) => `<a href="#s-${esc(s.id)}" class="${s.covered || s.summary ? '' : 'off'}"><span class="n">${i + 1}</span>${esc(s.title)}</a>`).join('');
+  const cards = secs.map((s, i) => {
+    const empty = !(s.covered || s.summary);
+    return `<section class="card sec ${empty ? 'empty-sec' : ''}" id="s-${esc(s.id)}">
+      <div class="sec-head"><span class="num">${i + 1}</span><div><h2 class="sec-title">${esc(s.title)}</h2><p class="q">${esc(s.question)}</p></div>
+        ${empty ? '<span class="tag">Not discussed</span>' : !s.covered ? '<span class="tag">Not asked directly</span>' : ''}</div>
+      ${empty ? '' : `
+      <div class="prose" contenteditable="plaintext-only" spellcheck="false" data-sec="${esc(s.id)}" data-kind="summary" onblur="saveSection(this)">${esc(s.summary)}</div>
+      ${s.points?.length ? `<ul class="points" contenteditable="plaintext-only" spellcheck="false" data-sec="${esc(s.id)}" data-kind="points" onblur="saveSection(this)">${s.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+      ${s.quotes?.length ? `<div class="quotes">${s.quotes.map(q => `<blockquote><p>“${esc(q.text)}”</p><footer>${esc(q.speaker)}${q.time ? ` <a href="/t/${mid}#t=${esc(q.time)}" class="t" title="Open in transcript">${esc(q.time)}</a>` : ''}</footer></blockquote>`).join('')}</div>` : ''}`}
+    </section>`;
+  }).join('');
+  const prio = summary.priorities?.length ? `<section class="card accent"><h2 class="sec-title">Top priorities</h2><ol class="prio" contenteditable="plaintext-only" spellcheck="false" data-field="priorities" onblur="saveField(this)">${summary.priorities.map(p => `<li>${esc(p)}</li>`).join('')}</ol></section>` : '';
+  const fu = summary.follow_ups?.length ? `<section class="card"><h2 class="sec-title">Follow-ups</h2><ul class="points" contenteditable="plaintext-only" spellcheck="false" data-field="follow_ups" onblur="saveField(this)">${summary.follow_ups.map(p => `<li>${esc(p)}</li>`).join('')}</ul></section>` : '';
+  document.getElementById('coverage').hidden = false;
+  document.getElementById('coverage').innerHTML = `<b>${covered}</b> of ${secs.length} sections covered`;
+  return `<div class="sum-layout">
+    <aside class="toc"><div class="toc-in"><h2>Sections</h2><nav>${toc}</nav>
+      <p class="hint">Click any text to edit it. Changes save on their own and flow into the exports.</p></div></aside>
+    <div class="sum-body">
+      <section class="card lead"><h2 class="sec-title">Overview</h2>
+        <div class="prose big" contenteditable="plaintext-only" spellcheck="false" data-field="overview" onblur="saveField(this)">${esc(summary.overview)}</div></section>
+      ${prio}${cards}${fu}
+      <p class="fine">${summary.words ? `About ${summary.words} words. ` : ''}Generated by ${esc(summary.model || 'Claude')}${summary.created ? ' on ' + new Date(summary.created * 1000).toLocaleDateString(undefined, {month: 'long', day: 'numeric', year: 'numeric'}) : ''}. Summaries can misfile or compress a point; check anything you plan to quote against the transcript.</p>
+    </div>
+  </div>`;
+}
+
+let poll;
+function render() {
+  const root = document.getElementById('root');
+  if (!root) return;
+  const st = summary.status;
+  document.getElementById('exports').hidden = st !== 'ready';
+  document.getElementById('regen').hidden = st !== 'ready';
+  document.getElementById('guideName').textContent = summary.guide_title || 'Summary';
+  root.innerHTML = st === 'ready' ? renderReady() : st === 'running' ? renderRunning() : st === 'error' ? renderError() : renderEmpty();
+  clearTimeout(poll);
+  if (st === 'running') poll = setTimeout(refresh, 5000);
+}
+async function refresh() {
+  const r = await fetch(`/api/meetings/${mid}/summary`);
+  summary = await r.json();
+  render();
+}
+async function generate(again) {
+  if (again && !confirm('Regenerate the summary? Your edits to this one will be replaced.')) return;
+  const sel = document.getElementById('guide');
+  const guide = sel ? sel.value : (summary.guide || defaultGuide);
+  summary = {status: 'running', guide, guide_title: (guides.find(g => g.id === guide) || {}).title};
+  render();
+  await api('/summarize', {guide});
+}
+
+function itemsOf(el) { return [...el.querySelectorAll('li')].map(li => li.innerText.trim()).filter(Boolean); }
+async function saveSection(el) {
+  const sec = (summary.sections || []).find(s => s.id === el.dataset.sec);
+  if (!sec) return;
+  const body = {};
+  if (el.dataset.kind === 'summary') {
+    const v = el.innerText.trim(); if (v === sec.summary) return; sec.summary = v; body.summary = v;
+  } else {
+    const v = itemsOf(el); if (JSON.stringify(v) === JSON.stringify(sec.points)) return; sec.points = v; body.points = v;
+  }
+  await api(`/summary/sections/${sec.id}`, body); flashSaved();
+}
+async function saveField(el) {
+  const f = el.dataset.field;
+  const v = f === 'overview' ? el.innerText.trim() : itemsOf(el);
+  if (JSON.stringify(v) === JSON.stringify(summary[f])) return;
+  summary[f] = v;
+  await api(`/summary/fields/${f}`, {value: v}); flashSaved();
+}
+render();
+</script>
+</body>
+</html>

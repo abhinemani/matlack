@@ -36,7 +36,9 @@
     </div>
   </div>
   <div class="toolbar">
+    <a class="btn" href="/t/{{ m.id }}/summary" id="sumLink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>{{ 'Summary' if (m.summary or {}).get('status') == 'ready' else 'Summarize' }}</a>
     <span class="saved" id="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Saved</span>
+    <button id="copyBtn" onclick="copyTranscript()" title="Copy the whole transcript with speakers and timestamps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
     <div class="group" role="group" aria-label="Export">
       <span class="group-label">Export</span>
       <a class="btn" href="/t/{{ m.id }}/export.md"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>Markdown</a>
@@ -246,6 +248,34 @@ async function addSpeaker() {
 }
 function seek(ms) { const a = document.getElementById('audio'); a.currentTime = ms / 1000; a.play(); }
 
+// Plain-text transcript, same shape as the .txt export: one paragraph per
+// speaker turn, headed by name and timestamp.
+function transcriptText() {
+  const blocks = [];
+  for (const u of meeting.utterances) {
+    const name = nameOf(u.speaker);
+    if (blocks.length && blocks[blocks.length - 1].name === name) blocks[blocks.length - 1].text += ' ' + u.text;
+    else blocks.push({name, start: u.start, text: u.text});
+  }
+  return [meeting.title, ''].concat(blocks.map(b => `${b.name} (${fmt(b.start)})\n${b.text}\n`)).join('\n').trim() + '\n';
+}
+async function copyTranscript() {
+  const btn = document.getElementById('copyBtn'), label = btn.querySelector('span');
+  const text = transcriptText();
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { /* fall through */ }
+  if (!ok) {
+    // Older path: works in browsers that gate the async API behind a permission.
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+  }
+  label.textContent = ok ? 'Copied' : 'Copy failed'; btn.classList.toggle('good', ok);
+  setTimeout(() => { label.textContent = 'Copy'; btn.classList.remove('good'); }, 1600);
+}
+
 // Follow playback: mark the line that is currently being spoken.
 (function () {
   const a = document.getElementById('audio');
@@ -293,6 +323,15 @@ function editTitle() {
 
 if (meeting.status === 'ready') {
   render();
+  // /t/<id>#t=mm:ss from a summary quote: scroll to that line and mark it.
+  const tm = /[#&]t=(\d+):(\d+)(?::(\d+))?/.exec(location.hash);
+  if (tm) {
+    const parts = tm.slice(1).filter(x => x !== undefined).map(Number);
+    const secs = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+    let target = null;
+    for (const r of document.querySelectorAll('.u[data-start]')) { if (parseFloat(r.dataset.start) <= secs * 1000 + 500) target = r; else break; }
+    if (target) { target.classList.add('playing'); target.scrollIntoView({block: 'center'}); }
+  }
   // On a phone the speaker panel sits above the transcript; start it folded
   // once every speaker is confirmed so the text comes first.
   const key = document.getElementById('key');

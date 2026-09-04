@@ -40,6 +40,22 @@ Fixing speakers from the command line:
     python transcribe.py reassign budget-kickoff 42 A # one line went to the wrong person
     python transcribe.py export budget-kickoff --format docx
 
+## Summaries that follow an interview guide
+
+Interviews that follow a script can be turned into an organized summary:
+Claude reads the transcript and files what was said under each question,
+cleaned up, with the interviewee's own quotes and timestamps.
+
+    python transcribe.py summarize frederick-budget-director
+    python transcribe.py export frederick-budget-director --summary --format docx
+
+The questions live in `guides/efficiency-review.md`. Each `## Section` is one
+question: the first line is the question itself and `- ` bullets are the
+follow-up probes. Add another guide as `guides/<name>.md` and pick it with
+`--guide <name>`. The result is saved into `meeting.json` under `summary`,
+written out as `<id>-summary.md`, and shown on the meeting's Summary page in
+the web UI, where every paragraph and bullet can be edited in place.
+
 ## The web page
 
 When a transcript is messy enough that command-line fixes get tedious:
@@ -64,10 +80,12 @@ That runs the web page with the inbox watcher on, storing everything in
 ## How it's built
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`
-(the Claude pass), `store.py` (meeting.json read/write and speaker edits),
+(the Claude name-guessing pass), `summarize.py` (the Claude summary pass,
+driven by `guides/`), `store.py` (meeting.json read/write and speaker edits),
 `export.py`, and `pipeline.py` (file → transcript, batch, watch).
 `transcribe.py` and `serve.py` are thin wrappers over it. Deleting
 `serve.py`, `templates/` and `static/` leaves a working CLI tool.
 
-Costs: AssemblyAI bills per audio hour; the Claude pass sends the transcript
-text once per meeting. Check both providers' current pricing pages.
+Costs: AssemblyAI bills per audio hour; each Claude pass sends the transcript
+text once per meeting (summaries use Claude Opus by default; set
+`SUMMARY_MODEL` in `.env` to change that). Check both providers' current pricing pages.
