@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ m.title }}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <a class="crumb" href="/">← Meetings</a>
+    <h1>{{ m.title }}</h1>
+    <p class="lede">{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "" }}{% if m.duration_ms %} · {% endif %}{{ m.utterances|length }} lines · <span class="status {{ m.status }}">{{ m.status }}</span></p>
+  </div>
+  <div class="toolbar">
+    <span class="saved" id="saved">Saved</span>
+    <a class="btn" href="/t/{{ m.id }}/export.md">Markdown</a>
+    <a class="btn" href="/t/{{ m.id }}/export.docx">Word</a>
+    <a class="btn" href="/t/{{ m.id }}/export.txt">Text</a>
+  </div>
+</header>
+
+<main class="wrap">
+  {% if m.error %}<div class="err">{{ m.error }}</div>{% endif %}
+  {% if m.status != "ready" and not m.error %}
+    <p class="empty">Still working ({{ m.status }}). This page will refresh.</p>
+    <script>setTimeout(() => location.reload(), 8000)</script>
+  {% else %}
+  <div class="layout">
+    <aside class="key">
+      <h2>Who's speaking</h2>
+      <p class="hint">Names in amber are guesses from the conversation. Edit or accept them; changes apply everywhere at once.</p>
+      <div id="speakers"></div>
+      <div class="foot">
+        <button onclick="addSpeaker()">Add a speaker</button>
+      </div>
+      <audio controls preload="none" src="/t/{{ m.id }}/audio" id="audio"></audio>
+    </aside>
+
+    <section class="stream" id="stream"></section>
+  </div>
+  {% endif %}
+</main>
+
+<script>
+const meeting = {{ meeting_json|safe }};
+const id = meeting.id;
+const colors = {};
+function color(label) {
+  if (!colors[label]) {
+    const i = Object.keys(colors).length;
+    colors[label] = `var(--sp-${'ABCDEFGHIJKL'[i % 12]})`;
+  }
+  return colors[label];
+}
+Object.keys(meeting.speakers).sort().forEach(color);
+
+function nameOf(label) {
+  const sp = meeting.speakers[label] || {};
+  return sp.name || sp.guess || `Speaker ${label}`;
+}
+function fmt(ms) {
+  if (ms == null) return '';
+  const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(sec).padStart(2, '0');
+}
+function esc(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+let saveTimer;
+function flashSaved() {
+  const el = document.getElementById('saved');
+  el.classList.add('show'); clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => el.classList.remove('show'), 1500);
+}
+async function api(path, body, method = 'POST') {
+  const r = await fetch(`/api/meetings/${id}${path}`, {
+    method, headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) { alert('That didn\'t save: ' + (await r.text())); throw new Error(); }
+  flashSaved();
+  return r.json();
+}
+
+function renderKey() {
+  const labels = Object.keys(meeting.speakers).sort();
+  const counts = {};
+  meeting.utterances.forEach(u => counts[u.speaker] = (counts[u.speaker] || 0) + 1);
+  document.getElementById('speakers').innerHTML = labels.map(l => {
+    const sp = meeting.speakers[l];
+    const others = labels.filter(o => o !== l);
+    const guess = !sp.confirmed && sp.guess
+      ? `<div class="guess"><b>Guess (${sp.confidence || 'low'})</b>${sp.evidence ? ' — ' + esc(sp.evidence) : ''}</div>` : '';
+    return `<div class="sp" style="--c:${color(l)}">
+      <div class="chip"></div>
+      <div>
+        <div class="label">Speaker ${l} <span class="lines">${counts[l] || 0} lines</span></div>
+        <input type="text" value="${esc(sp.name || sp.guess || '')}" placeholder="Name"
+               onchange="rename('${l}', this.value)">
+        ${guess}
+        <div class="row">
+          ${!sp.confirmed && sp.guess ? `<button class="quiet" onclick="confirmSp('${l}')">Accept</button>` : ''}
+          ${others.length ? `<select onchange="if(this.value){merge('${l}', this.value)}">
+             <option value="">Merge into…</option>
+             ${others.map(o => `<option value="${o}">${esc(nameOf(o))}</option>`).join('')}
+           </select>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStream() {
+  const labels = Object.keys(meeting.speakers).sort();
+  let prev = null;
+  document.getElementById('stream').innerHTML = meeting.utterances.map((u, i) => {
+    const same = u.speaker === prev; prev = u.speaker;
+    const opts = labels.map(l => `<option value="${l}" ${l === u.speaker ? 'selected' : ''}>${esc(nameOf(l))}</option>`).join('');
+    return `<div class="u ${same ? 'same' : ''}" style="--c:${color(u.speaker)}" data-i="${i}">
+      <div class="rail"></div>
+      <div class="t"><a href="#" onclick="seek(${u.start});return false">${fmt(u.start)}</a></div>
+      <div class="body">
+        <div class="name"><select onchange="reassign(${i}, this.value)">${opts}</select></div>
+        <div class="text" contenteditable="plaintext-only" onblur="editText(${i}, this.innerText)">${esc(u.text)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function render() { renderKey(); renderStream(); }
+
+async function rename(label, name) {
+  meeting.speakers = await api(`/speakers/${label}`, {name});
+  render();
+}
+async function confirmSp(label) {
+  meeting.speakers = await api(`/speakers/${label}`, {});
+  render();
+}
+async function merge(source, into) {
+  if (!confirm(`Treat every line from ${nameOf(source)} as ${nameOf(into)}?`)) { render(); return; }
+  const m = await api('/merge', {source, into});
+  meeting.utterances = m.utterances; meeting.speakers = m.speakers;
+  render();
+}
+async function reassign(i, label) {
+  meeting.utterances[i].speaker = label;
+  meeting.speakers = (await api(`/utterances/${i}`, {speaker: label})).speakers;
+  render();
+}
+async function editText(i, text) {
+  if (text.trim() === meeting.utterances[i].text) return;
+  meeting.utterances[i].text = text.trim();
+  await api(`/utterances/${i}`, {text: text.trim()});
+}
+async function addSpeaker() {
+  const name = prompt('Name for the new speaker (you can leave it blank):') ?? null;
+  if (name === null) return;
+  const r = await api('/speakers', {name});
+  meeting.speakers = r.speakers; color(r.label);
+  render();
+}
+function seek(ms) { const a = document.getElementById('audio'); a.currentTime = ms / 1000; a.play(); }
+
+if (meeting.status === 'ready') render();
+</script>
+</body>
+</html>

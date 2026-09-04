@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meetings</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Meetings</h1>
+    <p class="lede">Drop recordings here or in the inbox folder. Each one comes back with speakers guessed from what was said, ready for you to confirm.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <form id="upload" class="drop" action="/upload" method="post" enctype="multipart/form-data">
+    <p>Drag audio files onto this box, or choose them.
+      <small>m4a, mp3, wav, mp4. Several at once is fine; they run in parallel.</small></p>
+    <div>
+      <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
+      <button type="button" class="primary" onclick="document.getElementById('files').click()">Choose files</button>
+    </div>
+  </form>
+  <p class="watch">
+    {% if watching %}Watching <code>{{ inbox }}</code> — files that appear there are picked up automatically.
+    {% else %}Files placed in <code>{{ inbox }}</code> are picked up when you <button class="quiet" onclick="scan()">check the inbox</button> or run <code>python transcribe.py run</code>.{% endif %}
+  </p>
+
+  {% if meetings %}
+  <table class="meetings" id="list">
+    <thead><tr><th>Meeting</th><th>Speakers</th><th>Length</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for m in meetings %}
+      <tr data-id="{{ m.id }}">
+        <td class="title"><a href="/t/{{ m.id }}">{{ m.title }}</a></td>
+        <td class="who">{% for label, sp in m.speakers|dictsort %}{{ sp.name or sp.guess or ('Speaker ' ~ label) }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        <td>{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "" }}</td>
+        <td><span class="status {{ m.status }}">{{ m.status }}{% if m.error %} · {{ m.error[:80] }}{% endif %}</span></td>
+        <td class="actions">
+          {% if m.status == "error" %}<button class="quiet" onclick="retry('{{ m.id }}')">Retry</button>{% endif %}
+          <button class="quiet" onclick="remove('{{ m.id }}', '{{ m.title|e }}')">Delete</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No meetings yet. Add a recording above to start.</p>
+  {% endif %}
+</main>
+
+<script>
+const form = document.getElementById('upload');
+const input = document.getElementById('files');
+input.addEventListener('change', () => { if (input.files.length) form.submit(); });
+['dragenter','dragover'].forEach(e => form.addEventListener(e, ev => { ev.preventDefault(); form.classList.add('over'); }));
+['dragleave','drop'].forEach(e => form.addEventListener(e, ev => { ev.preventDefault(); form.classList.remove('over'); }));
+form.addEventListener('drop', ev => { input.files = ev.dataTransfer.files; form.submit(); });
+
+async function retry(id) { await fetch(`/api/meetings/${id}/retry`, {method:'POST'}); location.reload(); }
+async function remove(id, title) {
+  if (!confirm(`Delete "${title}" and its audio? This can't be undone.`)) return;
+  await fetch(`/api/meetings/${id}`, {method:'DELETE'}); location.reload();
+}
+async function scan() { await fetch('/api/meetings/inbox/scan', {method:'POST'}); location.reload(); }
+
+// While anything is in progress, refresh the list quietly.
+const busy = [...document.querySelectorAll('.status')].some(s => !/ready|error/.test(s.className));
+if (busy) setTimeout(() => location.reload(), 8000);
+</script>
+</body>
+</html>
