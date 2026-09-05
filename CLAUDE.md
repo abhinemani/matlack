@@ -42,6 +42,11 @@ transcripts. Read this before doing anything.
 - "What's public" → `python transcribe.py list` (marks public meetings and
   whether they have unpushed changes)
 
+## Unfinished setup
+`HANDOFF.md` lists what a previous session left for the laptop to finish
+(publishing setup). If the user mentions publishing, the site, or picking up
+where the last session left off, read it first.
+
 ## Rules
 - Keys and the publish passphrase live in `.env`. Never print them or commit them.
 - `data/published/` is a git checkout the publish step manages; don't edit it.
