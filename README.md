@@ -81,14 +81,6 @@ dropdown on the right, click a timestamp to hear that moment, click text to
 fix a transcription error. Every change saves immediately to the same
 `meeting.json` the CLI uses, so you can move between the two freely.
 
-## Hosting it
-
-    cp .env.example .env    # fill in keys; set APP_PASSWORD
-    docker compose up -d
-
-That runs the web page with the inbox watcher on, storing everything in
-`./data`. Put it behind whatever you normally use for HTTPS.
-
 ## How it's built
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`

@@ -3,13 +3,12 @@
   python serve.py            # http://127.0.0.1:8000
   python serve.py --watch    # also watch data/inbox while serving
 
-Env: APP_PASSWORD (optional, enables basic auth), WATCH_INBOX=1, WORKERS=3, HOST, PORT.
+Env: WORKERS=3, HOST, PORT.
 """
 from __future__ import annotations
 
 import json
 import os
-import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -17,9 +16,8 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile  # noqa: E402
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse  # noqa: E402
-from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from fastapi.templating import Jinja2Templates  # noqa: E402
 
@@ -35,18 +33,7 @@ templates.env.filters["ts"] = store.fmt_ts
 
 _executor = ThreadPoolExecutor(max_workers=WORKERS)
 _watch_thread: threading.Thread | None = None
-
-# --- optional password -------------------------------------------------------
-security = HTTPBasic(auto_error=False)
-
-
-def auth(creds: HTTPBasicCredentials | None = Depends(security)):
-    pw = os.environ.get("APP_PASSWORD")
-    if not pw:
-        return
-    if not creds or not secrets.compare_digest(creds.password, pw):
-        raise HTTPException(401, headers={"WWW-Authenticate": "Basic"})
-
+watch_on_start = False  # set by --watch here or in `transcribe.py serve`
 
 # --- helpers -----------------------------------------------------------------
 def _meeting_or_404(mid: str) -> dict:
@@ -76,7 +63,7 @@ def start_watcher() -> None:
 @app.on_event("startup")
 def _startup():
     store.ensure_dirs()
-    if os.environ.get("WATCH_INBOX") == "1":
+    if watch_on_start:
         start_watcher()
     # Resume anything interrupted by a restart.
     for mid in pipeline.pending_ids():
@@ -84,7 +71,7 @@ def _startup():
 
 
 # --- pages -------------------------------------------------------------------
-@app.get("/", response_class=HTMLResponse, dependencies=[Depends(auth)])
+@app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "index.html", {
         "meetings": [_public(m) for m in store.list_meetings()],
@@ -94,7 +81,7 @@ def index(request: Request):
     })
 
 
-@app.get("/t/{mid}", response_class=HTMLResponse, dependencies=[Depends(auth)])
+@app.get("/t/{mid}", response_class=HTMLResponse)
 def transcript_page(request: Request, mid: str):
     m = _meeting_or_404(mid)
     payload = json.dumps(m, ensure_ascii=False).replace("</", "<\\/")
@@ -102,7 +89,7 @@ def transcript_page(request: Request, mid: str):
                                       {"m": m, "meeting_json": payload, "store": store})
 
 
-@app.get("/t/{mid}/summary", response_class=HTMLResponse, dependencies=[Depends(auth)])
+@app.get("/t/{mid}/summary", response_class=HTMLResponse)
 def summary_page(request: Request, mid: str):
     m = _meeting_or_404(mid)
     payload = json.dumps(m.get("summary") or {}, ensure_ascii=False).replace("</", "<\\/")
@@ -113,7 +100,7 @@ def summary_page(request: Request, mid: str):
 
 
 # --- api ---------------------------------------------------------------------
-@app.post("/upload", dependencies=[Depends(auth)])
+@app.post("/upload")
 async def upload(files: list[UploadFile] = File(...), people: str = Form("")):
     store.ensure_dirs()
     names = store.parse_people(people)
@@ -133,17 +120,17 @@ async def upload(files: list[UploadFile] = File(...), people: str = Form("")):
     return RedirectResponse("/", status_code=303)
 
 
-@app.get("/api/meetings", dependencies=[Depends(auth)])
+@app.get("/api/meetings")
 def api_meetings():
     return [_public(m) for m in store.list_meetings()]
 
 
-@app.get("/api/meetings/{mid}", dependencies=[Depends(auth)])
+@app.get("/api/meetings/{mid}")
 def api_meeting(mid: str):
     return _meeting_or_404(mid)
 
 
-@app.post("/api/meetings/{mid}/rename", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/rename")
 async def api_rename_meeting(mid: str, request: Request):
     _meeting_or_404(mid)
     body = await request.json()
@@ -155,7 +142,7 @@ async def api_rename_meeting(mid: str, request: Request):
     return {"title": m["title"]}
 
 
-@app.post("/api/meetings/{mid}/retry", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/retry")
 def api_retry(mid: str):
     _meeting_or_404(mid)
     store.set_status(mid, "queued")
@@ -163,14 +150,14 @@ def api_retry(mid: str):
     return {"ok": True}
 
 
-@app.delete("/api/meetings/{mid}", dependencies=[Depends(auth)])
+@app.delete("/api/meetings/{mid}")
 def api_delete(mid: str):
     _meeting_or_404(mid)
     store.delete_meeting(mid)
     return {"ok": True}
 
 
-@app.post("/api/meetings/{mid}/scan", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/scan")
 def api_scan(mid: str = "inbox"):
     created = pipeline.scan_inbox()
     for m in created:
@@ -178,7 +165,7 @@ def api_scan(mid: str = "inbox"):
     return {"queued": [m["id"] for m in created]}
 
 
-@app.post("/api/meetings/{mid}/people", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/people")
 async def api_people(mid: str, request: Request):
     """Names the user knows were there. Accepts a list or free text."""
     _meeting_or_404(mid)
@@ -187,7 +174,7 @@ async def api_people(mid: str, request: Request):
     return {"people": m["people"]}
 
 
-@app.post("/api/meetings/{mid}/guess", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/guess")
 def api_guess(mid: str):
     """Run the naming pass again (sync; a few seconds). Confirmed names stay."""
     m = _meeting_or_404(mid)
@@ -200,7 +187,7 @@ def api_guess(mid: str):
     return m["speakers"]
 
 
-@app.post("/api/meetings/{mid}/speakers/{label}", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/speakers/{label}")
 async def api_speaker(mid: str, label: str, request: Request):
     _meeting_or_404(mid)
     body = await request.json()
@@ -212,7 +199,7 @@ async def api_speaker(mid: str, label: str, request: Request):
     return m["speakers"]
 
 
-@app.post("/api/meetings/{mid}/speakers", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/speakers")
 async def api_add_speaker(mid: str, request: Request):
     _meeting_or_404(mid)
     body = await request.json()
@@ -220,7 +207,7 @@ async def api_add_speaker(mid: str, request: Request):
     return {"label": label, "speakers": m["speakers"]}
 
 
-@app.post("/api/meetings/{mid}/merge", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/merge")
 async def api_merge(mid: str, request: Request):
     _meeting_or_404(mid)
     body = await request.json()
@@ -229,7 +216,7 @@ async def api_merge(mid: str, request: Request):
     return m
 
 
-@app.post("/api/meetings/{mid}/utterances/{index}", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/utterances/{index}")
 async def api_utterance(mid: str, index: int, request: Request):
     m = _meeting_or_404(mid)
     if not 0 <= index < len(m["utterances"]):
@@ -243,7 +230,7 @@ async def api_utterance(mid: str, index: int, request: Request):
     return {"ok": True, "speakers": m["speakers"]}
 
 
-@app.get("/t/{mid}/export.{fmt}", dependencies=[Depends(auth)])
+@app.get("/t/{mid}/export.{fmt}")
 def api_export(mid: str, fmt: str):
     m = _meeting_or_404(mid)
     if fmt == "md":
@@ -259,12 +246,12 @@ def api_export(mid: str, fmt: str):
 
 
 # --- summaries ---------------------------------------------------------------
-@app.get("/api/meetings/{mid}/summary", dependencies=[Depends(auth)])
+@app.get("/api/meetings/{mid}/summary")
 def api_summary(mid: str):
     return _meeting_or_404(mid).get("summary") or {"status": "none"}
 
 
-@app.post("/api/meetings/{mid}/summarize", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/summarize")
 async def api_summarize(mid: str, request: Request):
     m = _meeting_or_404(mid)
     if m["status"] != "ready":
@@ -287,7 +274,7 @@ async def api_summarize(mid: str, request: Request):
     return {"ok": True, "status": "running"}
 
 
-@app.post("/api/meetings/{mid}/summary/sections/{sid}", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/summary/sections/{sid}")
 async def api_summary_section(mid: str, sid: str, request: Request):
     _meeting_or_404(mid)
     body = await request.json()
@@ -298,7 +285,7 @@ async def api_summary_section(mid: str, sid: str, request: Request):
     return {"ok": True}
 
 
-@app.post("/api/meetings/{mid}/summary/fields/{field}", dependencies=[Depends(auth)])
+@app.post("/api/meetings/{mid}/summary/fields/{field}")
 async def api_summary_field(mid: str, field: str, request: Request):
     _meeting_or_404(mid)
     body = await request.json()
@@ -309,7 +296,7 @@ async def api_summary_field(mid: str, field: str, request: Request):
     return {"ok": True}
 
 
-@app.get("/t/{mid}/summary.{fmt}", dependencies=[Depends(auth)])
+@app.get("/t/{mid}/summary.{fmt}")
 def api_summary_export(mid: str, fmt: str):
     m = _meeting_or_404(mid)
     if (m.get("summary") or {}).get("status") != "ready":
@@ -322,7 +309,7 @@ def api_summary_export(mid: str, fmt: str):
     raise HTTPException(404)
 
 
-@app.get("/t/{mid}/audio", dependencies=[Depends(auth)])
+@app.get("/t/{mid}/audio")
 def api_audio(mid: str):
     m = _meeting_or_404(mid)
     return FileResponse(store.meeting_dir(mid) / m["audio"])
@@ -336,6 +323,5 @@ if __name__ == "__main__":
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     ap.add_argument("--watch", action="store_true")
     a = ap.parse_args()
-    if a.watch:
-        os.environ["WATCH_INBOX"] = "1"
+    watch_on_start = a.watch
     uvicorn.run(app, host=a.host, port=a.port)
