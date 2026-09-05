@@ -130,15 +130,27 @@ def _b64(b: bytes) -> str:
     return base64.b64encode(b).decode("ascii")
 
 
+def _aesgcm():
+    """The one third-party dependency publishing has, imported late so that a
+    missing package only ever breaks publishing, never transcribing or editing."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        raise PublishError("the cryptography package is not installed; run "
+                           "pip install -r requirements.txt. Nothing else needs it: transcripts, "
+                           "names and summaries still work locally.")
+    return AESGCM
+
+
 def encrypt(obj: dict, key: bytes) -> dict:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    AESGCM = _aesgcm()
     iv = os.urandom(12)
     data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return {"enc": "aes-gcm", "iv": _b64(iv), "data": _b64(AESGCM(key).encrypt(iv, data, None))}
 
 
 def decrypt(blob: dict, key: bytes) -> dict:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    AESGCM = _aesgcm()
     raw = AESGCM(key).decrypt(base64.b64decode(blob["iv"]), base64.b64decode(blob["data"]), None)
     return json.loads(raw.decode("utf-8"))
 
