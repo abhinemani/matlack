@@ -56,7 +56,22 @@
       <span class="status {{ m.status }}">{{ m.status }}</span>
       <p>Still working on this recording. The page refreshes on its own.</p>
     </div>
-    <script>setTimeout(() => location.reload(), 8000)</script>
+    <section class="people-card">
+      <h2>Who was there?</h2>
+      <p class="hint">While you wait: any names you already know help the speaker guesses. Optional, partial is fine, roles in parentheses.</p>
+      <input type="text" id="people" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off" onchange="savePeople(this.value)">
+    </section>
+    <script>
+      let reloadTimer = setTimeout(() => location.reload(), 8000);
+      const peopleBox = document.getElementById('people');
+      // Don't yank the page away while someone is typing.
+      peopleBox.addEventListener('focus', () => clearTimeout(reloadTimer));
+      peopleBox.addEventListener('blur', () => { reloadTimer = setTimeout(() => location.reload(), 8000); });
+      async function savePeople(text) {
+        const r = await fetch(`/api/meetings/{{ m.id }}/people`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({people: text})});
+        if (!r.ok) alert('That didn\'t save: ' + (await r.text()));
+      }
+    </script>
   {% else %}
   <div class="layout">
     <details class="key" id="key" open>
@@ -68,6 +83,15 @@
       <div class="key-body">
         <p class="hint">Amber names are guesses from the conversation. Edit or accept them; changes apply to every line at once.</p>
         <div id="speakers"></div>
+        <div class="people">
+          <div class="label">People you know were there</div>
+          <input type="text" id="people" placeholder="Names, comma-separated. Roles in parentheses." autocomplete="off" onchange="savePeople(this.value)">
+          <div class="row">
+            {% if m.status == 'ready' %}<button class="small" id="guessBtn" onclick="guessAgain()" title="Run the name guesses again with these people as context. Confirmed names are kept."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Guess again</button>
+            <span class="fine">Optional and partial. Claude still works out who's who.</span>
+            {% else %}<span class="fine">Optional and partial. Used when the transcript is retried.</span>{% endif %}
+          </div>
+        </div>
       </div>
       <div class="foot">
         <button class="small" onclick="addSpeaker()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add a speaker</button>
@@ -132,6 +156,26 @@ async function api(path, body, method = 'POST') {
   if (!r.ok) { alert('That didn\'t save: ' + (await r.text())); throw new Error(); }
   flashSaved();
   return r.json();
+}
+
+async function savePeople(text) {
+  const r = await api('/people', {people: text});
+  meeting.people = r.people;
+  document.getElementById('people').value = meeting.people.join(', ');
+}
+async function guessAgain() {
+  const btn = document.getElementById('guessBtn');
+  btn.disabled = true; btn.classList.add('busy');
+  const label = btn.lastChild; const was = label.textContent; label.textContent = 'Guessing…';
+  try {
+    // Flush a typed-but-not-blurred people field first.
+    const box = document.getElementById('people');
+    if (box.value.trim() !== (meeting.people || []).join(', ')) await savePeople(box.value);
+    meeting.speakers = await api('/guess');
+    renderKey(); renderStream();
+  } finally {
+    btn.disabled = false; btn.classList.remove('busy'); label.textContent = was;
+  }
 }
 
 function initialOf(label) {
@@ -209,6 +253,7 @@ function renderStream() {
   document.getElementById('hits').textContent = q ? `${shown}` : '';
 }
 function render() { renderKey(); renderStream(); }
+document.getElementById('people').value = (meeting.people || []).join(', ');
 
 let findTimer;
 function applyFind(v) {

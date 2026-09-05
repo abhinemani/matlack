@@ -35,6 +35,11 @@
       <p>Drag audio files onto this box, or choose them.
         <small>m4a, mp3, wav, mp4. Several at once is fine; they run in parallel.</small></p>
     </div>
+    <label class="who-field">
+      <span>Who was there? <em>Optional</em></span>
+      <input type="text" name="people" id="people" placeholder="Names you already know, comma-separated. Roles in parentheses." autocomplete="off">
+      <small>Fill this in first if you like; it goes along with the files you add next. Partial is fine, Claude still works out who's who.</small>
+    </label>
     <div>
       <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
       <button type="button" class="primary" onclick="document.getElementById('files').click()">
@@ -67,7 +72,9 @@
           </div>
         </div>
         <div class="cell who">
-          {% if names %}{% for n in names[:4] %}<span class="n">{{ n }}</span>{% endfor %}{% if names|length > 4 %} <span class="more">+{{ names|length - 4 }} more</span>{% endif %}{% else %}<span class="more">—</span>{% endif %}
+          {% if names %}{% for n in names[:4] %}<span class="n">{{ n }}</span>{% endfor %}{% if names|length > 4 %} <span class="more">+{{ names|length - 4 }} more</span>{% endif %}
+          {% elif m.people %}<span class="more" title="Names given before transcription">{{ m.people|join(', ') }}</span>
+          {% else %}<span class="more">—</span>{% endif %}
         </div>
         <div class="cell len">{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "—" }}</div>
         <div class="cell stat"><span class="status {{ m.status }}">{{ m.status }}{% if m.error %} <span class="detail">· {{ m.error[:80] }}</span>{% endif %}</span></div>

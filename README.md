@@ -24,6 +24,18 @@ Drop recordings in `data/inbox/`, then:
 
     python transcribe.py run
 
+In a terminal it first asks who was in each new meeting. Answer with any
+names you already know (partial is fine, roles in parentheses) or press
+Enter to skip; `run -y` skips the question. Claude still works out who is
+who from the conversation, it just starts with better context. The same
+names can be given up front with `add <file> --people "Vera Zubo" "Mark"`,
+typed into the upload box on the web page, or added later:
+
+    python transcribe.py people budget-kickoff "Vera Zubo (budget director)" "Mark"
+
+On a finished transcript that guesses the names again, keeping anything you
+have already confirmed.
+
 Each meeting becomes `data/meetings/<id>/` with the audio, a `meeting.json`
 (the source of truth), and a `<id>.md` transcript with guessed names applied
 and marked as guesses. To keep it running and pick up files as they land:

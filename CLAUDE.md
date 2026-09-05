@@ -15,6 +15,10 @@ transcripts. Read this before doing anything.
 
 ## Common requests and the right command
 - "Transcribe the new files" → `python transcribe.py run`
+  (in a terminal it asks who was in each new meeting; `-y` skips the question)
+- "Vera and Mark were in that meeting" → `python transcribe.py people <id> "Vera Zubo" "Mark (interviewer)"`
+  (optional, partial list; stored under `people` and used by the name guesses;
+  on a finished transcript it guesses again, keeping confirmed names)
 - "What's in the queue / what's done" → `python transcribe.py list`
 - "Who is speaker B in <meeting>" → `python transcribe.py show <id>`
 - "Speaker B is Vera" → `python transcribe.py rename <id> B "Vera Zubo"`

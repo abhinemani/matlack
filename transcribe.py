@@ -2,9 +2,12 @@
 """Command line for the transcriber. Examples:
 
   python transcribe.py run                  # process everything in data/inbox
+                                            # (asks who was in each new meeting; -y to skip)
   python transcribe.py run ~/Downloads/mtg  # process a specific folder (files are moved in)
   python transcribe.py run --watch          # keep watching the inbox
   python transcribe.py add file1.m4a file2.mp3
+  python transcribe.py add mtg.m4a --people "Vera Zubo" "Mark (interviewer)"
+  python transcribe.py people <id> "Vera Zubo" "Mark"   # names you know; guesses again
   python transcribe.py list
   python transcribe.py show <id>
   python transcribe.py rename <id> B "Vera Zubo"
@@ -29,6 +32,27 @@ load_env()
 from transcriber import export, pipeline, store, summarize  # noqa: E402
 
 
+def _interactive(a) -> bool:
+    return not getattr(a, "yes", False) and sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def ask_people(mid: str) -> list[str]:
+    """Optional, partial: a few names the user already knows were in the room.
+    Claude still does the identifying; this just gives it something to go on."""
+    m = store.load(mid)
+    if m.get("people"):
+        return m["people"]
+    try:
+        raw = input(f"Who was in “{m['title']}”? Names you know, comma-separated, "
+                    f"roles in parentheses (Enter to skip): ")
+    except EOFError:
+        return []
+    people = store.parse_people(raw)
+    if people:
+        store.set_people(mid, people)
+    return people
+
+
 def cmd_run(a):
     store.ensure_dirs()
     inbox = Path(a.folder) if a.folder else store.INBOX_DIR
@@ -36,6 +60,10 @@ def cmd_run(a):
         pipeline.watch(inbox, workers=a.workers, interval=a.interval)
         return
     created = pipeline.scan_inbox(inbox)
+    if created and _interactive(a):
+        print("A few known names help the speaker guesses. Optional; partial is fine.")
+        for m in created:
+            ask_people(m["id"])
     pending = pipeline.pending_ids()
     if not pending:
         print("Nothing to do. Drop .m4a/.mp3 files in", inbox)
@@ -48,9 +76,12 @@ def cmd_run(a):
 
 
 def cmd_add(a):
+    people = store.parse_people(a.people)
     for f in a.files:
-        m = pipeline.ingest_file(Path(f), move=not a.copy)
+        m = pipeline.ingest_file(Path(f), move=not a.copy, people=people)
         print("queued", m["id"])
+        if not people and _interactive(a):
+            ask_people(m["id"])
     if not a.no_run:
         pipeline.run_batch(workers=a.workers)
 
@@ -68,6 +99,8 @@ def cmd_list(a):
 def cmd_show(a):
     m = store.load(a.id)
     print(f"{m['title']}  [{m['status']}]  {store.fmt_ts(m.get('duration_ms'))}")
+    if m.get("people"):
+        print("  people given:", ", ".join(m["people"]))
     for label, sp in sorted(m["speakers"].items()):
         tag = "confirmed" if sp.get("confirmed") else (
             f"guess, {sp.get('confidence')}" if sp.get("guess") else "unidentified")
@@ -101,6 +134,25 @@ def cmd_merge(a):
     store.merge_speakers(a.id, a.source.upper(), a.into.upper())
     _after_edit(a.id)
     print(f"ok: {a.source.upper()} merged into {a.into.upper()}")
+
+
+def cmd_people(a):
+    if a.clear:
+        store.set_people(a.id, [])
+    elif a.names:
+        store.set_people(a.id, a.names)
+    m = store.load(a.id)
+    print("people:", ", ".join(m.get("people") or []) or "(none)")
+    if (a.names or a.clear) and not a.no_guess:
+        if m["status"] != "ready":
+            print(f"{a.id} isn't transcribed yet; the names will be used when it is.")
+            return
+        print("Guessing names again…")
+        m = pipeline.reguess(a.id)
+        for label in sorted(m["speakers"]):
+            sp = m["speakers"][label]
+            tag = "confirmed" if sp.get("confirmed") else f"guess, {sp.get('confidence')}"
+            print(f"  {label}: {store.display_name(m, label)}  ({tag})")
 
 
 def cmd_reassign(a):
@@ -162,6 +214,7 @@ def main(argv=None):
     s.add_argument("--watch", action="store_true")
     s.add_argument("--workers", type=int, default=3)
     s.add_argument("--interval", type=float, default=10.0)
+    s.add_argument("-y", "--yes", action="store_true", help="don't ask who was in each meeting")
     s.set_defaults(fn=cmd_run)
 
     s = sub.add_parser("add", help="register specific files and process them")
@@ -169,6 +222,8 @@ def main(argv=None):
     s.add_argument("--copy", action="store_true", help="copy instead of move")
     s.add_argument("--no-run", action="store_true")
     s.add_argument("--workers", type=int, default=3)
+    s.add_argument("--people", nargs="+", metavar="NAME", help="names you know were there (partial is fine)")
+    s.add_argument("-y", "--yes", action="store_true", help="don't ask who was in each meeting")
     s.set_defaults(fn=cmd_add)
 
     sub.add_parser("list").set_defaults(fn=cmd_list)
@@ -184,6 +239,11 @@ def main(argv=None):
 
     s = sub.add_parser("merge"); s.add_argument("id"); s.add_argument("source"); s.add_argument("into")
     s.set_defaults(fn=cmd_merge)
+
+    s = sub.add_parser("people", help="names you know were there; guesses speakers again")
+    s.add_argument("id"); s.add_argument("names", nargs="*", metavar="NAME")
+    s.add_argument("--clear", action="store_true"); s.add_argument("--no-guess", action="store_true")
+    s.set_defaults(fn=cmd_people)
 
     s = sub.add_parser("reassign"); s.add_argument("id"); s.add_argument("index", type=int)
     s.add_argument("label"); s.set_defaults(fn=cmd_reassign)

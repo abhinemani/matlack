@@ -17,7 +17,7 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile  # noqa: E402
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
@@ -58,7 +58,7 @@ def _meeting_or_404(mid: str) -> dict:
 
 def _public(m: dict) -> dict:
     return {k: m[k] for k in ("id", "title", "status", "error", "created", "updated",
-                              "duration_ms", "speakers") if k in m} | {
+                              "duration_ms", "speakers", "people") if k in m} | {
         "n_utterances": len(m.get("utterances", [])),
         "summary_status": (m.get("summary") or {}).get("status")}
 
@@ -114,8 +114,9 @@ def summary_page(request: Request, mid: str):
 
 # --- api ---------------------------------------------------------------------
 @app.post("/upload", dependencies=[Depends(auth)])
-async def upload(files: list[UploadFile] = File(...)):
+async def upload(files: list[UploadFile] = File(...), people: str = Form("")):
     store.ensure_dirs()
+    names = store.parse_people(people)
     ids = []
     for f in files:
         if Path(f.filename).suffix.lower() not in store.AUDIO_EXT:
@@ -126,7 +127,7 @@ async def upload(files: list[UploadFile] = File(...)):
                 out.write(chunk)
         final = store.INBOX_DIR / f.filename
         tmp.replace(final)
-        m = pipeline.ingest_file(final)
+        m = pipeline.ingest_file(final, people=names)
         ids.append(m["id"])
         _executor.submit(pipeline.process_meeting, m["id"])
     return RedirectResponse("/", status_code=303)
@@ -175,6 +176,28 @@ def api_scan(mid: str = "inbox"):
     for m in created:
         _executor.submit(pipeline.process_meeting, m["id"])
     return {"queued": [m["id"] for m in created]}
+
+
+@app.post("/api/meetings/{mid}/people", dependencies=[Depends(auth)])
+async def api_people(mid: str, request: Request):
+    """Names the user knows were there. Accepts a list or free text."""
+    _meeting_or_404(mid)
+    body = await request.json()
+    m = store.set_people(mid, body.get("people"))
+    return {"people": m["people"]}
+
+
+@app.post("/api/meetings/{mid}/guess", dependencies=[Depends(auth)])
+def api_guess(mid: str):
+    """Run the naming pass again (sync; a few seconds). Confirmed names stay."""
+    m = _meeting_or_404(mid)
+    if m["status"] != "ready":
+        raise HTTPException(409, "The transcript has to finish first")
+    try:
+        m = pipeline.reguess(mid)
+    except Exception as e:
+        raise HTTPException(502, f"Guessing failed: {e}")
+    return m["speakers"]
 
 
 @app.post("/api/meetings/{mid}/speakers/{label}", dependencies=[Depends(auth)])

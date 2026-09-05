@@ -19,7 +19,14 @@ label. For each label give:
   "confidence": "high" | "medium" | "low"
   "evidence": one short sentence citing what in the transcript supports it
 
-Be honest about low confidence. Never invent a name that is not in the text."""
+Be honest about low confidence. Never invent a name that is not in the text.
+
+The user may list people they know were there. Treat that list as context,
+not an answer key: it can be partial, it can include people who never spoke,
+and the speakers may include people not on it. When the transcript supports
+matching a voice to a listed person, use the listed spelling and say so in
+the evidence. Never assign a listed name to a voice just because the list has
+a name left over."""
 
 MAX_CHARS = int(os.environ.get("NAMING_MAX_CHARS", "150000"))
 
@@ -41,8 +48,22 @@ def _parse(text: str) -> dict:
     return json.loads(m.group(0) if m else text)
 
 
-def guess_names(utterances: list[dict]) -> dict[str, dict]:
-    """Returns {label: {guess, confidence, evidence}}. Empty dict if no key set."""
+def _context(people: list[str] | None, known: dict[str, str] | None) -> str:
+    parts = []
+    if people:
+        parts.append("People the user says were there (partial, not all of them "
+                     "necessarily spoke):\n" + "\n".join(f"- {p}" for p in people))
+    if known:
+        parts.append("Already confirmed by the user:\n"
+                     + "\n".join(f"- Speaker {l} is {n}" for l, n in sorted(known.items())))
+    return ("\n\n".join(parts) + "\n\n") if parts else ""
+
+
+def guess_names(utterances: list[dict], people: list[str] | None = None,
+                known: dict[str, str] | None = None) -> dict[str, dict]:
+    """Returns {label: {guess, confidence, evidence}}. Empty dict if no key set.
+    `people` are names the user supplied ahead of time; `known` maps labels the
+    user has already confirmed to their names (used when guessing again)."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key or not utterances:
         return {}
@@ -51,7 +72,8 @@ def guess_names(utterances: list[dict]) -> dict[str, dict]:
     model = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
     client = anthropic.Anthropic(api_key=api_key)
     labels = sorted({u["speaker"] for u in utterances})
-    prompt = (f"Speaker labels present: {', '.join(labels)}\n\nTranscript:\n\n"
+    prompt = (_context(people, known)
+              + f"Speaker labels present: {', '.join(labels)}\n\nTranscript:\n\n"
               + _render(utterances))
     resp = client.messages.create(
         model=model, max_tokens=1500, system=SYSTEM,

@@ -83,9 +83,25 @@ def list_meetings() -> list[dict]:
     return out
 
 
-def create_from_file(src: Path, move: bool = True) -> dict:
+def parse_people(text: str | list | None) -> list[str]:
+    """Names the user typed, deduplicated. Free text splits on commas,
+    semicolons and newlines; a list is taken item by item, so a role can ride
+    along after a comma ("Vera Zubo, budget director")."""
+    if not text:
+        return []
+    items = text if isinstance(text, list) else re.split(r"[,;\n]+", str(text))
+    out: list[str] = []
+    for raw in items:
+        s = " ".join(str(raw).split())
+        if s and s.lower() not in {o.lower() for o in out}:
+            out.append(s)
+    return out
+
+
+def create_from_file(src: Path, move: bool = True, people: list[str] | None = None) -> dict:
     """Register an audio file as a new meeting. Moves (or copies) the audio
-    into the meeting folder so the inbox stays clean."""
+    into the meeting folder so the inbox stays clean. `people` is an optional,
+    partial list of names the user already knows were there."""
     ensure_dirs()
     src = Path(src)
     mid = new_id(src.name)
@@ -108,9 +124,16 @@ def create_from_file(src: Path, move: bool = True) -> dict:
         "duration_ms": None,
         "utterances": [],
         "speakers": {},
+        "people": parse_people(people),
         "log": [],
     }
     return save(meeting)
+
+
+def set_people(mid: str, people: str | list | None) -> dict:
+    m = load(mid)
+    m["people"] = parse_people(people)
+    return save(m)
 
 
 def rename_meeting(mid: str, title: str) -> dict:

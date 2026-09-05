@@ -51,7 +51,7 @@ def process_meeting(mid: str) -> dict:
 
         log(f"[{mid}] {len(utterances)} utterances, {len(labels)} speakers; guessing names")
         try:
-            guesses = naming.guess_names(utterances)
+            guesses = naming.guess_names(utterances, people=m.get("people"))
         except Exception as e:  # naming is best-effort
             log(f"[{mid}] name guessing failed: {e}")
             guesses = {}
@@ -73,8 +73,31 @@ def process_meeting(mid: str) -> dict:
             _in_flight.discard(mid)
 
 
-def ingest_file(path: Path, move: bool = True) -> dict:
-    return store.create_from_file(path, move=move)
+def reguess(mid: str) -> dict:
+    """Run the naming pass again on a finished transcript, using the people
+    list and any names already confirmed. Confirmed speakers are left alone;
+    the others get fresh guesses."""
+    m = store.load(mid)
+    if m["status"] != "ready":
+        raise RuntimeError(f"{mid} is not transcribed yet (status: {m['status']})")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY is not set (put it in .env)")
+    known = {l: sp["name"] for l, sp in m["speakers"].items()
+             if sp.get("confirmed") and sp.get("name")}
+    guesses = naming.guess_names(m["utterances"], people=m.get("people"), known=known)
+    m = store.load(mid)
+    for label, g in guesses.items():
+        sp = m["speakers"].setdefault(label, {"name": "", "confirmed": False})
+        if not sp.get("confirmed"):
+            sp.update(g)
+    store.save(m)
+    export.write(m, "md")
+    log(f"[{mid}] guessed names again ({len(m.get('people') or [])} people given)")
+    return m
+
+
+def ingest_file(path: Path, move: bool = True, people: list[str] | None = None) -> dict:
+    return store.create_from_file(path, move=move, people=people)
 
 
 def _stable(path: Path, seen: dict, settle: float) -> bool:
