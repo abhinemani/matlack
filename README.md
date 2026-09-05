@@ -24,6 +24,18 @@ Drop recordings in `data/inbox/`, then:
 
     python transcribe.py run
 
+In a terminal it first asks who was in each new meeting. Answer with any
+names you already know (partial is fine, roles in parentheses) or press
+Enter to skip; `run -y` skips the question. Claude still works out who is
+who from the conversation, it just starts with better context. The same
+names can be given up front with `add <file> --people "Vera Zubo" "Mark"`,
+typed into the upload box on the web page, or added later:
+
+    python transcribe.py people budget-kickoff "Vera Zubo (budget director)" "Mark"
+
+On a finished transcript that guesses the names again, keeping anything you
+have already confirmed.
+
 Each meeting becomes `data/meetings/<id>/` with the audio, a `meeting.json`
 (the source of truth), and a `<id>.md` transcript with guessed names applied
 and marked as guesses. To keep it running and pick up files as they land:
@@ -69,20 +81,61 @@ dropdown on the right, click a timestamp to hear that moment, click text to
 fix a transcription error. Every change saves immediately to the same
 `meeting.json` the CLI uses, so you can move between the two freely.
 
-## Hosting it
+## Publishing a read-only site
 
-    cp .env.example .env    # fill in keys; set APP_PASSWORD
-    docker compose up -d
+Transcription, fixing names and summarizing all happen on your machine.
+When a meeting is ready to share, approve it and push; a small static site
+on GitHub Pages shows the approved transcripts and summaries, and nothing
+else. The site can't transcribe or edit anything.
 
-That runs the web page with the inbox watcher on, storing everything in
-`./data`. Put it behind whatever you normally use for HTTPS.
+One-time setup is three lines in `.env`. The simplest arrangement uses a
+`gh-pages` branch of this very repository, so there is nothing to create:
+
+    PUBLISH_REPO=https://github.com/you/matlack
+    PUBLISH_BRANCH=gh-pages
+    PUBLISH_PASSPHRASE=a long phrase you will type to open the site
+    PUBLISH_URL=https://you.github.io/matlack
+
+The first publish pushes the branch along with a small GitHub Actions
+workflow that deploys it to Pages and switches Pages on for the repository.
+If GitHub declines to switch it on by itself, do it once by hand: repository
+*Settings → Pages → Source: GitHub Actions*. Later pushes deploy within a
+minute or two.
+
+If you would rather keep the site out of the code repository, create an
+empty repository (private needs a paid plan for Pages; public is fine since
+only ciphertext is stored) and point `PUBLISH_REPO` at it with
+`PUBLISH_BRANCH=main`.
+
+Then, per meeting:
+
+    python transcribe.py publish budget-kickoff     # approve it and push
+    python transcribe.py publish                    # push again after edits
+    python transcribe.py unpublish budget-kickoff   # take it down
+
+Or in the web page: **Make public** on a transcript, then **Publish** on the
+Meetings page. Rows show whether an approved meeting has changes that
+haven't been pushed yet.
+
+What goes up is the transcript with confirmed names, and the summary if
+there is one. Audio, name-guess evidence and processing details stay home.
+Everything is encrypted with the passphrase before it leaves your machine,
+so GitHub only ever holds ciphertext; the site asks for the passphrase and
+decrypts in the browser. A Pages URL is public even for a private repo,
+which is why the passphrase isn't optional. If you truly want an open site,
+set `PUBLISH_PUBLIC=1` instead of a passphrase.
+
+The site checkout lives in `data/published/` and is managed for you. The
+viewer's source is in `site/`; it is copied in on every publish.
 
 ## How it's built
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`
 (the Claude name-guessing pass), `summarize.py` (the Claude summary pass,
 driven by `guides/`), `store.py` (meeting.json read/write and speaker edits),
-`export.py`, and `pipeline.py` (file → transcript, batch, watch).
+`export.py`, `publish.py` (the encrypted static site and its git push), and
+`pipeline.py` (file → transcript, batch, watch). `site/` is the viewer that
+gets published.
 `transcribe.py` and `serve.py` are thin wrappers over it. Deleting
 `serve.py`, `templates/` and `static/` leaves a working CLI tool.
 
