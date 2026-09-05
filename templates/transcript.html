@@ -37,6 +37,12 @@
   </div>
   <div class="toolbar">
     <span class="saved" id="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Saved</span>
+    {% if m.status == 'ready' %}
+    <div class="group" role="group" aria-label="Publishing" id="pubGroup" data-state="{{ pub_state }}">
+      <button class="btn {{ 'good' if pub_state != 'off' else '' }}" id="pubToggle" onclick="togglePublic()" title="{% if pub_state == 'off' %}Approve this meeting for the published site{% else %}On the published site; click to withdraw it{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>{{ 'Public' if pub_state != 'off' else 'Make public' }}</span></button>
+      <button class="btn" id="pubPush" onclick="pushSite()" {% if pub_state not in ('pending', 'changed') or not publishing.configured %}hidden{% endif %} title="Push the site so this change shows up online"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>{{ 'Push changes' if pub_state == 'changed' else 'Push' }}</span></button>
+    </div>
+    {% endif %}
     <div class="group" role="group" aria-label="Export">
       <span class="group-label">Export</span>
       <button class="btn" id="copyBtn" onclick="copyTranscript()" title="Copy the whole transcript with speakers and timestamps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
@@ -158,6 +164,39 @@ async function api(path, body, method = 'POST') {
   return r.json();
 }
 
+const publishingConfigured = {{ publishing.configured|tojson }};
+function paintPublic(state) {
+  const t = document.getElementById('pubToggle'), p = document.getElementById('pubPush');
+  if (!t) return;
+  t.classList.toggle('good', state !== 'off');
+  t.querySelector('span').textContent = state === 'off' ? 'Make public' : 'Public';
+  t.title = state === 'off' ? 'Approve this meeting for the published site' : 'On the published site; click to withdraw it';
+  p.hidden = !(publishingConfigured && (state === 'pending' || state === 'changed'));
+  p.querySelector('span').textContent = state === 'changed' ? 'Push changes' : 'Push';
+  document.getElementById('pubGroup').dataset.state = state;
+}
+async function togglePublic() {
+  const cur = document.getElementById('pubGroup').dataset.state;
+  const want = cur === 'off';
+  const live = cur === 'published' || cur === 'changed';
+  if (live && !confirm('Take this meeting off the published site? It disappears on the next push.')) return;
+  const r = await api('/public', {public: want});
+  paintPublic(r.state);
+  if (live) {  // the removal only takes effect once the site is pushed
+    const p = document.getElementById('pubPush');
+    p.hidden = !publishingConfigured; p.querySelector('span').textContent = 'Push removal';
+  }
+}
+async function pushSite() {
+  const p = document.getElementById('pubPush'), l = p.querySelector('span'), was = l.textContent;
+  p.disabled = true; l.textContent = 'Pushing…';
+  const r = await fetch('/api/publish', {method: 'POST'});
+  if (!r.ok) { alert('Publish failed: ' + (await r.text())); p.disabled = false; l.textContent = was; return; }
+  const rep = await r.json();
+  flashSaved();
+  p.disabled = false;
+  paintPublic(rep.publishing.states[id] || 'off');
+}
 async function savePeople(text) {
   const r = await api('/people', {people: text});
   meeting.people = r.people;

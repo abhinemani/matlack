@@ -35,9 +35,16 @@ transcripts. Read this before doing anything.
   (`## Section` = one question, first line is the question, `- ` = probes),
   then re-run `summarize`
 - "Open the editor" → `python serve.py` then http://127.0.0.1:8000
+- "Publish <meeting> / put it on the site" → `python transcribe.py publish <id>`
+  (approves it and pushes the read-only site; needs PUBLISH_* in `.env`)
+- "Push the site / publish my edits" → `python transcribe.py publish`
+- "Take <meeting> off the site" → `python transcribe.py unpublish <id>`
+- "What's public" → `python transcribe.py list` (marks public meetings and
+  whether they have unpushed changes)
 
 ## Rules
-- Keys live in `.env`. Never print them or commit them.
+- Keys and the publish passphrase live in `.env`. Never print them or commit them.
+- `data/published/` is a git checkout the publish step manages; don't edit it.
 - Don't delete anything under `data/meetings/` without asking.
 - Speaker labels are single capital letters (A, B, C…). Names are free text.
 - Summaries are editable in the web page; regenerating replaces those edits.

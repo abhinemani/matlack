@@ -19,6 +19,9 @@
   python transcribe.py export <id> --summary --format docx
   python transcribe.py guides                   # list interview guides
   python transcribe.py retry <id>
+  python transcribe.py publish <id>             # approve a meeting and push the site
+  python transcribe.py publish                  # push everything approved (after edits)
+  python transcribe.py unpublish <id>           # take it off the site
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from transcriber import export, pipeline, store, summarize  # noqa: E402
+from transcriber import export, pipeline, publish, store, summarize  # noqa: E402
 
 
 def _interactive(a) -> bool:
@@ -90,10 +93,14 @@ def cmd_list(a):
     ms = store.list_meetings()
     if not ms:
         print("No meetings yet.")
+    marks = {"off": "", "pending": "public, not pushed", "changed": "public, changed",
+             "published": "public"}
     for m in ms:
         n = len(m.get("utterances", []))
         sp = ", ".join(store.display_name(m, l) for l in sorted(m.get("speakers", {})))
-        print(f"{m['status']:12} {m['id']:40} {store.fmt_ts(m.get('duration_ms'))}  {n:4} lines  {sp}")
+        mark = marks[publish.state(m)]
+        print(f"{m['status']:12} {m['id']:40} {store.fmt_ts(m.get('duration_ms'))}  {n:4} lines  {sp}"
+              + (f"  [{mark}]" if mark else ""))
 
 
 def cmd_show(a):
@@ -197,6 +204,45 @@ def cmd_retry(a):
     pipeline.run_batch(workers=1, ids=[a.id])
 
 
+def _print_report(r: dict):
+    for k in ("added", "updated", "removed"):
+        if r[k]:
+            print(f"  {k:8} {', '.join(r[k])}")
+    if r["unchanged"]:
+        print(f"  {'same':8} {len(r['unchanged'])} meeting(s)")
+    if r["pushed"]:
+        print("pushed" + (f"; the site updates in about a minute: {r['url']}" if r["url"] else "."))
+    elif r["commit"]:
+        print(f"committed {r['commit']} locally, not pushed")
+    else:
+        print("nothing to push; the site already matches")
+
+
+def cmd_publish(a):
+    for mid in a.ids:
+        m = store.load(mid)
+        if m["status"] != "ready":
+            sys.exit(f"{mid} is not transcribed yet (status: {m['status']})")
+        store.set_public(mid, True)
+        print(f"approved {mid}")
+    try:
+        r = publish.publish(push=not a.no_push)
+    except publish.PublishError as e:
+        sys.exit(f"publish failed: {e}")
+    _print_report(r)
+
+
+def cmd_unpublish(a):
+    for mid in a.ids:
+        store.set_public(mid, False)
+        print(f"withdrawn {mid}")
+    try:
+        r = publish.publish(push=not a.no_push)
+    except publish.PublishError as e:
+        sys.exit(f"publish failed: {e}")
+    _print_report(r)
+
+
 def cmd_serve(a):
     import uvicorn
     import serve as web
@@ -261,6 +307,16 @@ def main(argv=None):
     sub.add_parser("guides", help="list interview guides").set_defaults(fn=cmd_guides)
 
     s = sub.add_parser("retry"); s.add_argument("id"); s.set_defaults(fn=cmd_retry)
+
+    s = sub.add_parser("publish", help="approve meetings for the site and push it")
+    s.add_argument("ids", nargs="*", metavar="ID", help="meetings to approve first (none: just push)")
+    s.add_argument("--no-push", action="store_true", help="build and commit locally only")
+    s.set_defaults(fn=cmd_publish)
+
+    s = sub.add_parser("unpublish", help="take meetings off the site")
+    s.add_argument("ids", nargs="+", metavar="ID")
+    s.add_argument("--no-push", action="store_true")
+    s.set_defaults(fn=cmd_unpublish)
 
     s = sub.add_parser("serve", help="start the web UI")
     s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8000)

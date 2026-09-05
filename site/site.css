@@ -1,0 +1,32 @@
+/* Extras for the published, read-only viewer. style.css comes from the local
+   page so both look the same; this file only covers what differs. */
+.loading { color: var(--muted); text-align: center; padding: 60px 0; }
+
+/* Passphrase gate */
+.gate { max-width: 420px; margin: 72px auto 0; padding: 0 var(--gutter); }
+.gate-card { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 32px 28px 26px; }
+.gate-ico { width: 44px; height: 44px; border-radius: 11px; background: var(--action-soft); color: var(--action); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+.gate-ico svg { width: 22px; height: 22px; }
+.gate h1 { font-size: 22px; margin-bottom: 6px; }
+.gate p { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+.gate input[type=password] { font: 16px var(--sans); border: 1px solid var(--rule); border-radius: 8px; padding: 9px 12px; width: 100%; background: var(--paper); color: var(--ink); -webkit-appearance: none; appearance: none; }
+.gate input[type=password]:focus { border-color: var(--action); box-shadow: 0 0 0 3px var(--action-soft); outline: none; }
+.gate .row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.gate .row button { margin-left: auto; }
+.gate label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+.gate .bad { color: var(--bad); font-size: 13px; margin: 10px 0 0; }
+.gate .fine { text-align: center; margin-top: 16px; }
+
+/* Read-only transcript: the speaker name is a label, not a select. */
+.u .name span { font: 600 13.5px var(--sans); color: var(--c); padding: 3px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.u .t { color: var(--faint); }
+.u.target { box-shadow: inset 3px 0 0 var(--c); background: var(--paper-2); }
+.key .sp .who { font: 500 15px var(--sans); color: var(--ink); padding: 7px 0 0; }
+.key .sp .who.unconfirmed { color: var(--warn); }
+.key .fine { padding: 0 0 6px; }
+
+.brand-bar .nav button.lock { border: 0; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 500; padding: 5px 10px; border-radius: 7px; }
+.brand-bar .nav button.lock:hover { color: var(--ink); background: var(--page); }
+.brand-bar .nav button.lock svg { width: 13px; height: 13px; }
+
+.published-note { color: var(--faint); font-size: 12.5px; margin-top: 28px; }

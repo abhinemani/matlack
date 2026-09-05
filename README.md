@@ -81,12 +81,53 @@ dropdown on the right, click a timestamp to hear that moment, click text to
 fix a transcription error. Every change saves immediately to the same
 `meeting.json` the CLI uses, so you can move between the two freely.
 
+## Publishing a read-only site
+
+Transcription, fixing names and summarizing all happen on your machine.
+When a meeting is ready to share, approve it and push; a small static site
+on GitHub Pages shows the approved transcripts and summaries, and nothing
+else. The site can't transcribe or edit anything.
+
+One-time setup:
+
+1. Create an empty **private** repository on GitHub, say `matlack-site`.
+2. In its settings, turn on Pages: *Deploy from a branch*, branch `main`,
+   folder `/ (root)`. Note the URL GitHub gives you.
+3. Add to `.env`:
+
+       PUBLISH_REPO=git@github.com:you/matlack-site.git
+       PUBLISH_PASSPHRASE=a long phrase you will type to open the site
+       PUBLISH_URL=https://you.github.io/matlack-site
+
+Then, per meeting:
+
+    python transcribe.py publish budget-kickoff     # approve it and push
+    python transcribe.py publish                    # push again after edits
+    python transcribe.py unpublish budget-kickoff   # take it down
+
+Or in the web page: **Make public** on a transcript, then **Publish** on the
+Meetings page. Rows show whether an approved meeting has changes that
+haven't been pushed yet.
+
+What goes up is the transcript with confirmed names, and the summary if
+there is one. Audio, name-guess evidence and processing details stay home.
+Everything is encrypted with the passphrase before it leaves your machine,
+so GitHub only ever holds ciphertext; the site asks for the passphrase and
+decrypts in the browser. A Pages URL is public even for a private repo,
+which is why the passphrase isn't optional. If you truly want an open site,
+set `PUBLISH_PUBLIC=1` instead of a passphrase.
+
+The site checkout lives in `data/published/` and is managed for you. The
+viewer's source is in `site/`; it is copied in on every publish.
+
 ## How it's built
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`
 (the Claude name-guessing pass), `summarize.py` (the Claude summary pass,
 driven by `guides/`), `store.py` (meeting.json read/write and speaker edits),
-`export.py`, and `pipeline.py` (file → transcript, batch, watch).
+`export.py`, `publish.py` (the encrypted static site and its git push), and
+`pipeline.py` (file → transcript, batch, watch). `site/` is the viewer that
+gets published.
 `transcribe.py` and `serve.py` are thin wrappers over it. Deleting
 `serve.py`, `templates/` and `static/` leaves a working CLI tool.
 

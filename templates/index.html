@@ -24,6 +24,15 @@
     <div class="h1-row"><h1>Meetings</h1>{% if meetings %}<span class="count">{{ meetings|length }}</span>{% endif %}</div>
     <p class="lede">Drop recordings here or in the inbox folder. Each one comes back with speakers guessed from what was said, ready for you to confirm.</p>
   </div>
+  <div class="toolbar pub-bar">
+    <span class="saved" id="pubMsg"></span>
+    {% if publishing.configured %}
+      {% if publishing.url %}<a class="btn" href="{{ publishing.url }}" target="_blank" rel="noopener" title="Open the published site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>View site</a>{% endif %}
+      <button class="btn primary" id="pubBtn" onclick="doPublish()" title="{% if publishing.waiting %}{{ publishing.waiting|length }} approved meeting(s) have changes to push{% else %}Everything approved is already on the site{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Publish</span>{% if publishing.waiting %}<span class="badge">{{ publishing.waiting|length }}</span>{% endif %}</button>
+    {% else %}
+      <span class="pub-off" title="{{ publishing.error }}">Publishing isn’t set up yet · see README</span>
+    {% endif %}
+  </div>
 </header>
 
 <main class="wrap">
@@ -66,7 +75,7 @@
           <div class="title-cell">
             <span class="avatar" style="--c:var(--sp-{{ 'ABCDEFGHIJKL'[loop.index0 % 12] }})">{{ m.title[0]|upper }}</span>
             <div style="min-width:0">
-              <a class="name" href="/t/{{ m.id }}">{{ m.title }}</a>{% if m.summary_status == 'ready' %}<a class="chip-sum" href="/t/{{ m.id }}/summary" title="Open summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Summary</a>{% endif %}
+              <a class="name" href="/t/{{ m.id }}">{{ m.title }}</a>{% if m.summary_status == 'ready' %}<a class="chip-sum" href="/t/{{ m.id }}/summary" title="Open summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Summary</a>{% endif %}{% if m.pub_state != 'off' %}<span class="chip-pub {{ m.pub_state }}" title="{% if m.pub_state == 'published' %}On the published site{% elif m.pub_state == 'changed' %}Approved; edited since it was last pushed{% else %}Approved; not pushed yet{% endif %}">{% if m.pub_state == 'published' %}Public{% elif m.pub_state == 'changed' %}Public · changes{% else %}Public · not pushed{% endif %}</span>{% endif %}
               <div class="when" data-created="{{ m.created }}"></div>
             </div>
           </div>
@@ -112,6 +121,18 @@ async function remove(id, title) {
   await fetch(`/api/meetings/${id}`, {method:'DELETE'}); location.reload();
 }
 async function scan() { await fetch('/api/meetings/inbox/scan', {method:'POST'}); location.reload(); }
+async function doPublish() {
+  const btn = document.getElementById('pubBtn'), label = btn.querySelector('span');
+  btn.disabled = true; label.textContent = 'Publishing…';
+  const r = await fetch('/api/publish', {method: 'POST'});
+  if (!r.ok) { alert('Publish failed: ' + (await r.text())); btn.disabled = false; label.textContent = 'Publish'; return; }
+  const rep = await r.json();
+  const n = rep.added.length + rep.updated.length + rep.removed.length;
+  const msg = document.getElementById('pubMsg');
+  msg.textContent = rep.pushed ? `Pushed ${n} change${n === 1 ? '' : 's'}` : 'Site already up to date';
+  msg.classList.add('show');
+  setTimeout(() => location.reload(), 1200);
+}
 
 // Relative "added" time under each title.
 function timeAgo(ts) {

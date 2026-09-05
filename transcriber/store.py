@@ -136,6 +136,13 @@ def set_people(mid: str, people: str | list | None) -> dict:
     return save(m)
 
 
+def set_public(mid: str, public: bool) -> dict:
+    """Approve (or withdraw) a meeting for the published site."""
+    m = load(mid)
+    m["public"] = bool(public)
+    return save(m)
+
+
 def rename_meeting(mid: str, title: str) -> dict:
     m = load(mid)
     m["title"] = title.strip() or m["title"]

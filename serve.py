@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from fastapi.templating import Jinja2Templates  # noqa: E402
 
-from transcriber import export, pipeline, store, summarize  # noqa: E402
+from transcriber import export, pipeline, publish, store, summarize  # noqa: E402
 
 HERE = Path(__file__).parent
 WORKERS = int(os.environ.get("WORKERS", "3"))
@@ -45,9 +45,25 @@ def _meeting_or_404(mid: str) -> dict:
 
 def _public(m: dict) -> dict:
     return {k: m[k] for k in ("id", "title", "status", "error", "created", "updated",
-                              "duration_ms", "speakers", "people") if k in m} | {
+                              "duration_ms", "speakers", "people", "public") if k in m} | {
         "n_utterances": len(m.get("utterances", [])),
-        "summary_status": (m.get("summary") or {}).get("status")}
+        "summary_status": (m.get("summary") or {}).get("status"),
+        "pub_state": publish.state(m)}
+
+
+def _publish_status() -> dict:
+    """What the Publish button needs: is it set up, what's waiting, where's the site."""
+    cfg = publish.config()
+    try:
+        publish.check_config(cfg)
+        error = None
+    except publish.PublishError as e:
+        error = str(e)
+    states = {m["id"]: publish.state(m) for m in store.list_meetings()}
+    return {"configured": error is None, "error": error, "url": cfg["url"],
+            "encrypted": bool(cfg["passphrase"]),
+            "waiting": [i for i, s in states.items() if s in ("pending", "changed")],
+            "public": [i for i, s in states.items() if s != "off"], "states": states}
 
 
 def start_watcher() -> None:
@@ -77,6 +93,7 @@ def index(request: Request):
         "meetings": [_public(m) for m in store.list_meetings()],
         "watching": _watch_thread is not None,
         "inbox": str(store.INBOX_DIR),
+        "publishing": _publish_status(),
         "store": store,
     })
 
@@ -86,7 +103,9 @@ def transcript_page(request: Request, mid: str):
     m = _meeting_or_404(mid)
     payload = json.dumps(m, ensure_ascii=False).replace("</", "<\\/")
     return templates.TemplateResponse(request, "transcript.html",
-                                      {"m": m, "meeting_json": payload, "store": store})
+                                      {"m": m, "meeting_json": payload, "store": store,
+                                       "pub_state": publish.state(m),
+                                       "publishing": _publish_status()})
 
 
 @app.get("/t/{mid}/summary", response_class=HTMLResponse)
@@ -163,6 +182,36 @@ def api_scan(mid: str = "inbox"):
     for m in created:
         _executor.submit(pipeline.process_meeting, m["id"])
     return {"queued": [m["id"] for m in created]}
+
+
+@app.post("/api/meetings/{mid}/public")
+async def api_public(mid: str, request: Request):
+    """Approve a meeting for the published site, or withdraw it. Pushing is a
+    separate step (POST /api/publish) so several approvals make one push."""
+    m = _meeting_or_404(mid)
+    body = await request.json()
+    want = bool(body.get("public"))
+    if want and m["status"] != "ready":
+        raise HTTPException(409, "The transcript has to finish first")
+    m = store.set_public(mid, want)
+    return {"public": m["public"], "state": publish.state(m), "publishing": _publish_status()}
+
+
+@app.get("/api/publish")
+def api_publish_status():
+    return _publish_status()
+
+
+@app.post("/api/publish")
+def api_publish():
+    """Build the site from every approved meeting, commit, push. Runs git, so
+    it takes a few seconds; the page shows a spinner meanwhile."""
+    lines = []
+    try:
+        r = publish.publish(push=True, log=lines.append)
+    except publish.PublishError as e:
+        raise HTTPException(502, str(e))
+    return r | {"log": lines, "publishing": _publish_status()}
 
 
 @app.post("/api/meetings/{mid}/people")
