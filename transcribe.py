@@ -210,6 +210,8 @@ def _print_report(r: dict):
             print(f"  {k:8} {', '.join(r[k])}")
     if r["unchanged"]:
         print(f"  {'same':8} {len(r['unchanged'])} meeting(s)")
+    if r.get("audio"):
+        print(f"  {'audio':8} {', '.join(r['audio'])}")
     if r["pushed"]:
         print("pushed" + (f"; the site updates in about a minute: {r['url']}" if r["url"] else "."))
     elif r["commit"]:

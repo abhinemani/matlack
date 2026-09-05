@@ -61,9 +61,33 @@ def check_config(cfg: dict | None = None) -> dict:
 
 
 # --- what gets published -----------------------------------------------------
+AUDIO_TYPES = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".aac": "audio/aac",
+               ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+               ".flac": "audio/flac", ".webm": "audio/webm", ".mov": "video/quicktime"}
+
+
+def audio_source(m: dict) -> tuple[Path, str] | None:
+    """The meeting's recording on disk and its MIME type, if it is still there."""
+    if not m.get("audio"):
+        return None
+    p = store.meeting_dir(m["id"]) / m["audio"]
+    if not p.is_file():
+        return None
+    return p, AUDIO_TYPES.get(p.suffix.lower(), "application/octet-stream")
+
+
+def _sha256_file(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def payload(m: dict) -> dict:
     """The public shape of a meeting: transcript, display names, summary.
-    No audio, no API ids, no processing log, no guess evidence."""
+    No API ids, no processing log, no guess evidence. The recording itself is
+    added by publish() as a pointer to a file under a/."""
     speakers = {}
     for label, sp in sorted(m.get("speakers", {}).items()):
         speakers[label] = {"name": store.display_name(m, label),
@@ -143,6 +167,18 @@ def decrypt(blob: dict, key: bytes) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
+def encrypt_bytes(data: bytes, key: bytes) -> bytes:
+    """Binary form used for recordings: 12-byte IV followed by AES-GCM ciphertext."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    iv = os.urandom(12)
+    return iv + AESGCM(key).encrypt(iv, data, None)
+
+
+def decrypt_bytes(data: bytes, key: bytes) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    return AESGCM(key).decrypt(data[:12], data[12:], None)
+
+
 # --- git ---------------------------------------------------------------------
 def _git(*args: str, cwd: Path) -> str:
     try:
@@ -174,9 +210,9 @@ def checkout(cfg: dict) -> Path:
     return d
 
 
-def _clean(d: Path) -> None:
+def _clean(d: Path, keep: tuple[str, ...] = ()) -> None:
     for p in d.iterdir():
-        if p.name == ".git":
+        if p.name == ".git" or p.name in keep:
             continue
         if p.is_dir():
             shutil.rmtree(p)
@@ -234,9 +270,12 @@ def publish(push: bool = True, log=print) -> dict:
             same_key = False
     if not same_key:
         old_files, old_index, old_site = {}, None, {}
+        if (d / "a").is_dir():
+            shutil.rmtree(d / "a")
 
-    # Viewer files: always refreshed so the site tracks the code.
-    _clean(d)
+    # Viewer files: always refreshed so the site tracks the code. Recordings
+    # under a/ are content-addressed, so they survive and get pruned below.
+    _clean(d, keep=("a",))
     for src in SITE_SRC.iterdir():
         if src.is_file() and src.name != "pages.yml":
             shutil.copy2(src, d / src.name)
@@ -249,12 +288,30 @@ def publish(push: bool = True, log=print) -> dict:
 
     # Meetings.
     (d / "m").mkdir()
-    report = {"added": [], "updated": [], "removed": [], "unchanged": [],
+    report = {"added": [], "updated": [], "removed": [], "unchanged": [], "audio": [],
               "url": cfg["url"], "encrypted": enc, "pushed": False, "commit": None}
     now = time.time()
     published: dict[str, dict] = {}
+    wanted_audio: set[str] = set()
     for m in meetings:
         p = payload(m)
+        src = audio_source(m)
+        if src:
+            # The recording rides along so timestamps can play in the browser.
+            # Named by content hash: an unchanged file is never re-encrypted or
+            # re-uploaded, and a changed one gets a fresh name.
+            path, mime = src
+            aname = f"{m['id']}-{_sha256_file(path)[:12]}{'.bin' if enc else path.suffix.lower()}"
+            p["audio"] = {"file": f"a/{aname}", "type": mime,
+                          "size": path.stat().st_size, "enc": enc}
+            wanted_audio.add(aname)
+            target = d / "a" / aname
+            if not target.exists():
+                target.parent.mkdir(exist_ok=True)
+                data = path.read_bytes()
+                target.write_bytes(encrypt_bytes(data, key) if enc else data)
+                report["audio"].append(m["id"])
+                log(f"[{m['id']}] recording {'encrypted' if enc else 'copied'} ({p['audio']['size'] // 1048576} MB)")
         h = fingerprint(p)
         name = f"{m['id']}.json"
         prev = (m.get("published") or {}).get("hash")
@@ -265,6 +322,12 @@ def publish(push: bool = True, log=print) -> dict:
             (d / "m" / name).write_text(wrap(p))
             report["updated" if prev else "added"].append(m["id"])
         published[m["id"]] = {"at": now, "hash": h}
+    if (d / "a").is_dir():  # recordings of withdrawn or re-recorded meetings
+        for stale in d.glob("a/*"):
+            if stale.name not in wanted_audio:
+                stale.unlink()
+        if not any((d / "a").iterdir()):
+            (d / "a").rmdir()
     index = {"meetings": [entry(m) for m in
                           sorted(meetings, key=lambda x: x.get("created") or 0, reverse=True)]}
     ih = fingerprint(index)

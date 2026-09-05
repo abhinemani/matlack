@@ -117,8 +117,12 @@ Or in the web page: **Make public** on a transcript, then **Publish** on the
 Meetings page. Rows show whether an approved meeting has changes that
 haven't been pushed yet.
 
-What goes up is the transcript with confirmed names, and the summary if
-there is one. Audio, name-guess evidence and processing details stay home.
+What goes up is the transcript with confirmed names, the summary if there
+is one, and the recording, so timestamps on the site play the audio just as
+they do locally. Name-guess evidence and processing details stay home.
+Recordings are the bulk of the site (roughly 20 MB per half hour); the
+viewer downloads and decrypts one only when you ask for it, and an unchanged
+recording is never uploaded twice.
 Everything is encrypted with the passphrase before it leaves your machine,
 so GitHub only ever holds ciphertext; the site asks for the passphrase and
 decrypts in the browser. A Pages URL is public even for a private repo,
