@@ -83,6 +83,13 @@ fix a transcription error. Every change saves immediately to the same
 
 ## Publishing a read-only site
 
+This section is optional. Everything above runs entirely on your machine
+with no publishing set up, and stays that way if publishing is set up and
+later breaks: a failed push, a GitHub outage, a missing `PUBLISH_*` line or
+a missing `cryptography` package only ever stops the publish step itself.
+Transcribing, naming speakers, summarizing, the web page and the exports
+never touch the site, and `data/meetings/` is the only copy that matters.
+
 Transcription, fixing names and summarizing all happen on your machine.
 When a meeting is ready to share, approve it and push; a small static site
 on GitHub Pages shows the approved transcripts and summaries, and nothing

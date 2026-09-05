@@ -48,6 +48,14 @@ transcripts. Read this before doing anything.
 where the last session left off, read it first.
 
 ## Rules
+- Local first. Transcribing, naming speakers, summarizing, the web page and
+  the exports must keep working with no `PUBLISH_*` settings, no network to
+  GitHub and no `cryptography` package. Publishing is an optional last step
+  that may fail on its own; never make anything else depend on it, and never
+  let a publish failure touch `data/meetings/`.
+- README.md must always say how to run everything locally, CLI and web page
+  (the "Daily use", "Summaries" and "The web page" sections). Keep those
+  current when commands change.
 - Keys and the publish passphrase live in `.env`. Never print them or commit them.
 - `data/published/` is a git checkout the publish step manages; don't edit it.
 - Don't delete anything under `data/meetings/` without asking.

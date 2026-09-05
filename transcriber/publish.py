@@ -154,28 +154,40 @@ def _b64(b: bytes) -> str:
     return base64.b64encode(b).decode("ascii")
 
 
+def _aesgcm():
+    """The one third-party dependency publishing has, imported late so that a
+    missing package only ever breaks publishing, never transcribing or editing."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        raise PublishError("the cryptography package is not installed; run "
+                           "pip install -r requirements.txt. Nothing else needs it: transcripts, "
+                           "names and summaries still work locally.")
+    return AESGCM
+
+
 def encrypt(obj: dict, key: bytes) -> dict:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    AESGCM = _aesgcm()
     iv = os.urandom(12)
     data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return {"enc": "aes-gcm", "iv": _b64(iv), "data": _b64(AESGCM(key).encrypt(iv, data, None))}
 
 
 def decrypt(blob: dict, key: bytes) -> dict:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    AESGCM = _aesgcm()
     raw = AESGCM(key).decrypt(base64.b64decode(blob["iv"]), base64.b64decode(blob["data"]), None)
     return json.loads(raw.decode("utf-8"))
 
 
 def encrypt_bytes(data: bytes, key: bytes) -> bytes:
     """Binary form used for recordings: 12-byte IV followed by AES-GCM ciphertext."""
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    AESGCM = _aesgcm()
     iv = os.urandom(12)
     return iv + AESGCM(key).encrypt(iv, data, None)
 
 
 def decrypt_bytes(data: bytes, key: bytes) -> bytes:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    AESGCM = _aesgcm()
     return AESGCM(key).decrypt(data[:12], data[12:], None)
 
 
@@ -295,6 +307,8 @@ def publish(push: bool = True, log=print) -> dict:
     wanted_audio: set[str] = set()
     for m in meetings:
         p = payload(m)
+        h = fingerprint(p)  # transcript only; state() compares against this
+        aname = None
         src = audio_source(m)
         if src:
             # The recording rides along so timestamps can play in the browser.
@@ -312,16 +326,15 @@ def publish(push: bool = True, log=print) -> dict:
                 target.write_bytes(encrypt_bytes(data, key) if enc else data)
                 report["audio"].append(m["id"])
                 log(f"[{m['id']}] recording {'encrypted' if enc else 'copied'} ({p['audio']['size'] // 1048576} MB)")
-        h = fingerprint(p)
         name = f"{m['id']}.json"
-        prev = (m.get("published") or {}).get("hash")
-        if prev == h and name in old_files:
+        prev = m.get("published") or {}
+        if prev.get("hash") == h and prev.get("audio") == aname and name in old_files:
             (d / "m" / name).write_text(old_files[name])
             report["unchanged"].append(m["id"])
         else:
             (d / "m" / name).write_text(wrap(p))
-            report["updated" if prev else "added"].append(m["id"])
-        published[m["id"]] = {"at": now, "hash": h}
+            report["updated" if prev.get("hash") else "added"].append(m["id"])
+        published[m["id"]] = {"at": now, "hash": h, "audio": aname}
     if (d / "a").is_dir():  # recordings of withdrawn or re-recorded meetings
         for stale in d.glob("a/*"):
             if stale.name not in wanted_audio:
