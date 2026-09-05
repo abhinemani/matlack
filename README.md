@@ -38,7 +38,11 @@ have already confirmed.
 
 Each meeting becomes `data/meetings/<id>/` with the audio, a `meeting.json`
 (the source of truth), and a `<id>.md` transcript with guessed names applied
-and marked as guesses. To keep it running and pick up files as they land:
+and marked as guesses. The audio file is only needed for playback and for
+re-transcribing; once a meeting is done you can delete it to save space and
+the transcript, names and summary stay exactly as they are, locally and on
+the published site (which then shows that meeting as text only). To keep it
+running and pick up files as they land:
 
     python transcribe.py run --watch
 
@@ -124,9 +128,20 @@ Or in the web page: **Make public** on a transcript, then **Publish** on the
 Meetings page. Rows show whether an approved meeting has changes that
 haven't been pushed yet.
 
-What goes up is the transcript with confirmed names, and the summary if
-there is one. Audio, name-guess evidence and processing details stay home;
-the site is text only, so it stays small however many meetings it holds.
+What goes up is the transcript with confirmed names, the summary if there
+is one, and the recording, so timestamps on the site play the audio just as
+they do locally. Name-guess evidence and processing details stay home.
+Recordings are the bulk of the site (roughly 20 MB per half hour); the
+viewer downloads and decrypts one only when you ask for it, and an unchanged
+recording is never uploaded twice.
+
+GitHub Pages serves sites up to about 1 GB, so recordings have a budget,
+900 MB by default (`PUBLISH_AUDIO_CAP_MB`). Meetings already on the site
+keep their audio; once the budget is spent, newer ones go up as text only
+and the publish output says which. The site keeps working either way, only
+the player is missing on those pages. To go text only for everything, set
+`PUBLISH_AUDIO=0` in `.env` and publish again; that removes the recordings
+from the site (though not from the branch's git history).
 Everything is encrypted with the passphrase before it leaves your machine,
 so GitHub only ever holds ciphertext; the site asks for the passphrase and
 decrypts in the browser. A Pages URL is public even for a private repo,

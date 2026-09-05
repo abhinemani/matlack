@@ -13,6 +13,11 @@ Env:
   PUBLISH_URL         where the site lives, for links (optional)
   PUBLISH_BRANCH      branch Pages serves (default: main)
   PUBLISH_DIR         local checkout (default: <DATA_DIR>/published)
+  PUBLISH_AUDIO       0 = text only; default 1 publishes recordings too, so
+                      timestamps play in the browser
+  PUBLISH_AUDIO_CAP_MB  recordings budget for the whole site (default 900,
+                      under GitHub Pages' 1 GB); past it, new meetings go up
+                      as text only and the publish says so
 """
 from __future__ import annotations
 
@@ -30,6 +35,10 @@ from . import store
 HERE = Path(__file__).resolve().parent.parent
 SITE_SRC = HERE / "site"
 PBKDF2_ITER = 250_000
+# GitHub Pages serves sites up to about 1 GB and rejects any single file over
+# 100 MB. Recordings are the only thing here that could reach either.
+AUDIO_CAP_MB = 900
+AUDIO_FILE_MAX_MB = 95
 
 
 class PublishError(RuntimeError):
@@ -45,7 +54,16 @@ def config() -> dict:
         "url": os.environ.get("PUBLISH_URL", "").strip().rstrip("/"),
         "branch": os.environ.get("PUBLISH_BRANCH", "main").strip() or "main",
         "dir": Path(os.environ.get("PUBLISH_DIR") or (store.DATA_DIR / "published")).resolve(),
+        "audio": os.environ.get("PUBLISH_AUDIO", "1").strip() != "0",
+        "audio_cap_mb": _int_env("PUBLISH_AUDIO_CAP_MB", AUDIO_CAP_MB),
     }
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
 
 
 def check_config(cfg: dict | None = None) -> dict:
@@ -61,9 +79,33 @@ def check_config(cfg: dict | None = None) -> dict:
 
 
 # --- what gets published -----------------------------------------------------
+AUDIO_TYPES = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".aac": "audio/aac",
+               ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+               ".flac": "audio/flac", ".webm": "audio/webm", ".mov": "video/quicktime"}
+
+
+def audio_source(m: dict) -> tuple[Path, str] | None:
+    """The meeting's recording on disk and its MIME type, if it is still there."""
+    if not m.get("audio"):
+        return None
+    p = store.meeting_dir(m["id"]) / m["audio"]
+    if not p.is_file():
+        return None
+    return p, AUDIO_TYPES.get(p.suffix.lower(), "application/octet-stream")
+
+
+def _sha256_file(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def payload(m: dict) -> dict:
     """The public shape of a meeting: transcript, display names, summary.
-    No audio, no API ids, no processing log, no guess evidence."""
+    No API ids, no processing log, no guess evidence. The recording itself is
+    added by publish() as a pointer to a file under a/."""
     speakers = {}
     for label, sp in sorted(m.get("speakers", {}).items()):
         speakers[label] = {"name": store.display_name(m, label),
@@ -155,6 +197,18 @@ def decrypt(blob: dict, key: bytes) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
+def encrypt_bytes(data: bytes, key: bytes) -> bytes:
+    """Binary form used for recordings: 12-byte IV followed by AES-GCM ciphertext."""
+    AESGCM = _aesgcm()
+    iv = os.urandom(12)
+    return iv + AESGCM(key).encrypt(iv, data, None)
+
+
+def decrypt_bytes(data: bytes, key: bytes) -> bytes:
+    AESGCM = _aesgcm()
+    return AESGCM(key).decrypt(data[:12], data[12:], None)
+
+
 # --- git ---------------------------------------------------------------------
 def _git(*args: str, cwd: Path) -> str:
     try:
@@ -186,9 +240,9 @@ def checkout(cfg: dict) -> Path:
     return d
 
 
-def _clean(d: Path) -> None:
+def _clean(d: Path, keep: tuple[str, ...] = ()) -> None:
     for p in d.iterdir():
-        if p.name == ".git":
+        if p.name == ".git" or p.name in keep:
             continue
         if p.is_dir():
             shutil.rmtree(p)
@@ -199,6 +253,45 @@ def _clean(d: Path) -> None:
 # --- the publish itself ------------------------------------------------------
 def approved() -> list[dict]:
     return [m for m in store.list_meetings() if m.get("public") and m["status"] == "ready"]
+
+
+def plan_audio(meetings: list[dict], cfg: dict, enc: bool, log=print) -> dict[str, tuple]:
+    """Which recordings fit on the site: id -> (path, mime, site name, size).
+
+    Stays under the budget by keeping what is already on the site first and
+    adding newer meetings until the budget is spent; anything left over is
+    published as text only, with a note saying so. Files GitHub would reject
+    outright (over 100 MB) are always text only."""
+    cands = []
+    for m in meetings:
+        src = audio_source(m)
+        if not src:
+            if (m.get("published") or {}).get("audio"):
+                log(f"[{m['id']}] recording is no longer on disk; the site keeps the transcript "
+                    "and summary and drops playback")
+            continue
+        path, mime = src
+        size = path.stat().st_size
+        if size > AUDIO_FILE_MAX_MB * 1048576:
+            log(f"[{m['id']}] recording is {size // 1048576} MB, over GitHub's 100 MB file limit; "
+                "publishing it as text only")
+            continue
+        aname = f"{m['id']}-{_sha256_file(path)[:12]}{'.bin' if enc else path.suffix.lower()}"
+        already = (m.get("published") or {}).get("audio") == aname
+        cands.append((0 if already else 1, -(m.get("created") or 0), m["id"], path, mime, aname, size))
+    budget = cfg["audio_cap_mb"] * 1048576
+    plan, used, dropped = {}, 0, []
+    for _, _, mid, path, mime, aname, size in sorted(cands):
+        if used + size > budget:
+            dropped.append(mid)
+            continue
+        plan[mid] = (path, mime, aname, size)
+        used += size
+    if dropped:
+        log(f"Recording budget reached ({used // 1048576} of {cfg['audio_cap_mb']} MB): "
+            f"{', '.join(dropped)} published as text only. Raise PUBLISH_AUDIO_CAP_MB, "
+            "unpublish older meetings, or set PUBLISH_AUDIO=0 in .env for a text-only site.")
+    return plan
 
 
 def publish(push: bool = True, log=print) -> dict:
@@ -246,9 +339,12 @@ def publish(push: bool = True, log=print) -> dict:
             same_key = False
     if not same_key:
         old_files, old_index, old_site = {}, None, {}
+        if (d / "a").is_dir():
+            shutil.rmtree(d / "a")
 
-    # Viewer files: always refreshed so the site tracks the code.
-    _clean(d)
+    # Viewer files: always refreshed so the site tracks the code. Recordings
+    # under a/ are content-addressed, so they survive and get pruned below.
+    _clean(d, keep=("a",))
     for src in SITE_SRC.iterdir():
         if src.is_file() and src.name != "pages.yml":
             shutil.copy2(src, d / src.name)
@@ -261,22 +357,49 @@ def publish(push: bool = True, log=print) -> dict:
 
     # Meetings.
     (d / "m").mkdir()
-    report = {"added": [], "updated": [], "removed": [], "unchanged": [],
+    report = {"added": [], "updated": [], "removed": [], "unchanged": [], "audio": [],
+              "audio_skipped": [], "audio_mb": 0, "audio_cap_mb": cfg["audio_cap_mb"],
               "url": cfg["url"], "encrypted": enc, "pushed": False, "commit": None}
     now = time.time()
     published: dict[str, dict] = {}
+    audio_plan = plan_audio(meetings, cfg, enc, log) if cfg["audio"] else {}
+    wanted_audio: set[str] = set()
     for m in meetings:
         p = payload(m)
-        h = fingerprint(p)
+        h = fingerprint(p)  # transcript only; state() compares against this
+        aname = None
+        if m["id"] in audio_plan:
+            # The recording rides along so timestamps can play in the browser.
+            # Named by content hash: an unchanged file is never re-encrypted or
+            # re-uploaded, and a changed one gets a fresh name.
+            path, mime, aname, size = audio_plan[m["id"]]
+            p["audio"] = {"file": f"a/{aname}", "type": mime, "size": size, "enc": enc}
+            wanted_audio.add(aname)
+            report["audio_mb"] += size / 1048576
+            target = d / "a" / aname
+            if not target.exists():
+                target.parent.mkdir(exist_ok=True)
+                data = path.read_bytes()
+                target.write_bytes(encrypt_bytes(data, key) if enc else data)
+                report["audio"].append(m["id"])
+                log(f"[{m['id']}] recording {'encrypted' if enc else 'copied'} ({size // 1048576} MB)")
+        elif cfg["audio"] and audio_source(m):
+            report["audio_skipped"].append(m["id"])
         name = f"{m['id']}.json"
-        prev = (m.get("published") or {}).get("hash")
-        if prev == h and name in old_files:
+        prev = m.get("published") or {}
+        if prev.get("hash") == h and prev.get("audio") == aname and name in old_files:
             (d / "m" / name).write_text(old_files[name])
             report["unchanged"].append(m["id"])
         else:
             (d / "m" / name).write_text(wrap(p))
-            report["updated" if prev else "added"].append(m["id"])
-        published[m["id"]] = {"at": now, "hash": h}
+            report["updated" if prev.get("hash") else "added"].append(m["id"])
+        published[m["id"]] = {"at": now, "hash": h, "audio": aname}
+    if (d / "a").is_dir():  # recordings of withdrawn or re-recorded meetings
+        for stale in d.glob("a/*"):
+            if stale.name not in wanted_audio:
+                stale.unlink()
+        if not any((d / "a").iterdir()):
+            (d / "a").rmdir()
     index = {"meetings": [entry(m) for m in
                           sorted(meetings, key=lambda x: x.get("created") or 0, reverse=True)]}
     ih = fingerprint(index)

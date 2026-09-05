@@ -25,6 +25,7 @@ function timeAgo(ts) {
   return new Date(ts * 1000).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'});
 }
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const mb = n => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0) + ' MB';
 const colors = {};
 function color(label) {
   if (!colors[label]) colors[label] = `var(--sp-${'ABCDEFGHIJKL'[Object.keys(colors).length % 12]})`;
@@ -177,6 +178,7 @@ async function viewMeeting(id, t) {
   const m = await load(`m/${encodeURIComponent(id)}.json`);
   Object.keys(m.speakers).sort().forEach(color);
   const nameOf = l => m.speakers[l]?.name || `Speaker ${l}`;
+  const audio = m.audio && m.audio.file ? m.audio : null;
   const counts = {}; m.utterances.forEach(u => counts[u.speaker] = (counts[u.speaker] || 0) + 1);
   const key_ = Object.keys(m.speakers).sort().map(l => {
     const sp = m.speakers[l], n = nameOf(l);
@@ -195,8 +197,72 @@ async function viewMeeting(id, t) {
       <label class="find"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input type="search" id="find" placeholder="Find in transcript" autocomplete="off"><span class="hits" id="hits"></span></label></div>
       <section class="stream" id="stream"></section></div>
-  </div></main>`;
+  </div>${audio ? `<div class="player" id="player">
+    <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></svg></span>
+    <div class="meta-col"><b>${esc(m.title)}</b><span id="playerHint">${audio.enc ? 'Loads and unlocks in your browser' : 'Click a timestamp to jump'}</span></div>
+    ${audio.enc ? `<button class="btn primary load" id="loadAudio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M12 16l-4-4M12 16l4-4"/><path d="M4 18v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1"/></svg><span>Load recording · ${mb(audio.size)}</span></button>` : ''}
+    <audio controls preload="none" id="audio" ${audio.enc ? 'hidden' : `src="${esc(audio.file)}"`}></audio>
+  </div>` : ''}</main>`;
   wireCopy(() => transcriptText(m));
+
+  // Recording. In the clear it streams straight from the site; encrypted, it
+  // is fetched whole, decrypted with the passphrase key and played from memory.
+  let audioReady = !!audio && !audio.enc, loading = null;
+  const ensureAudio = () => {
+    if (!audio) return Promise.resolve(false);
+    if (audioReady) return Promise.resolve(true);
+    if (loading) return loading;
+    const btn = document.getElementById('loadAudio'), label = btn.querySelector('span'), hint = document.getElementById('playerHint');
+    btn.disabled = true; btn.classList.add('busy');
+    loading = (async () => {
+      const r = await fetch(audio.file);
+      if (!r.ok) throw new Error(`recording ${r.status}`);
+      const total = +r.headers.get('content-length') || audio.size;
+      const chunks = []; let got = 0;
+      const reader = r.body.getReader();
+      for (;;) {
+        const {done, value} = await reader.read(); if (done) break;
+        chunks.push(value); got += value.length;
+        label.textContent = `Loading ${mb(got)} of ${mb(total)}`;
+      }
+      const buf = new Uint8Array(got); let off = 0;
+      for (const c of chunks) { buf.set(c, off); off += c.length; }
+      label.textContent = 'Unlocking…';
+      const plain = await crypto.subtle.decrypt({name: 'AES-GCM', iv: buf.subarray(0, 12)}, key, buf.subarray(12));
+      const el = document.getElementById('audio');
+      el.src = URL.createObjectURL(new Blob([plain], {type: audio.type}));
+      el.hidden = false; btn.remove(); hint.textContent = 'Click a timestamp to jump';
+      audioReady = true;
+      return true;
+    })().catch(e => {
+      loading = null; btn.disabled = false; btn.classList.remove('busy');
+      label.textContent = 'Try again'; hint.textContent = `Couldn't load the recording: ${e.message}`;
+      return false;
+    });
+    return loading;
+  };
+  const seek = async ms => {
+    if (!(await ensureAudio())) return;
+    const el = document.getElementById('audio');
+    el.currentTime = ms / 1000;
+    try { await el.play(); } catch { document.getElementById('playerHint').textContent = 'Press play to listen from here'; }
+  };
+  if (audio && audio.enc) document.getElementById('loadAudio').onclick = () => ensureAudio();
+  document.getElementById('stream').addEventListener('click', ev => {
+    const a = ev.target.closest('a[data-seek]'); if (!a) return;
+    ev.preventDefault(); seek(parseFloat(a.dataset.seek));
+  });
+  // Follow playback: mark the line being spoken, as the local page does.
+  if (audio) {
+    const el = document.getElementById('audio'); let cur = null;
+    el.addEventListener('timeupdate', () => {
+      const ms = el.currentTime * 1000; let next = null;
+      for (const r of document.querySelectorAll('.u[data-start]')) { if (parseFloat(r.dataset.start) <= ms) next = r; else break; }
+      if (next === cur) return;
+      if (cur) cur.classList.remove('playing');
+      cur = next; if (cur) cur.classList.add('playing');
+    });
+  }
 
   let query = '';
   const highlight = text => {
@@ -213,7 +279,7 @@ async function viewMeeting(id, t) {
       if (hit) shown++;
       return `<div class="u ${same ? 'same' : ''} ${hit ? '' : 'hide'}" style="--c:${color(u.speaker)}" data-i="${i}" data-start="${u.start}">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3.5-6 7-6s7 2.5 7 6"/></svg></div>
-        <div class="t">${fmt(u.start)}</div>
+        <div class="t">${audio ? `<a href="#" data-seek="${u.start}" title="Play from here">${fmt(u.start)}</a>` : fmt(u.start)}</div>
         <div class="body"><div class="name"><span>${esc(nameOf(u.speaker))}</span></div><div class="text">${highlight(u.text)}</div></div></div>`;
     }).join('');
     document.getElementById('stream').innerHTML = html + (shown ? '' : `<p class="none">No lines match “${esc(query)}”.</p>`);

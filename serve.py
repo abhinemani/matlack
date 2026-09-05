@@ -104,6 +104,7 @@ def transcript_page(request: Request, mid: str):
     payload = json.dumps(m, ensure_ascii=False).replace("</", "<\\/")
     return templates.TemplateResponse(request, "transcript.html",
                                       {"m": m, "meeting_json": payload, "store": store,
+                                       "has_audio": store.has_audio(m),
                                        "pub_state": publish.state(m),
                                        "publishing": _publish_status()})
 
@@ -163,7 +164,10 @@ async def api_rename_meeting(mid: str, request: Request):
 
 @app.post("/api/meetings/{mid}/retry")
 def api_retry(mid: str):
-    _meeting_or_404(mid)
+    m = _meeting_or_404(mid)
+    if not store.has_audio(m):
+        raise HTTPException(409, "the recording has been deleted, so this meeting can't be "
+                                 "transcribed again; the transcript and summary are still there")
     store.set_status(mid, "queued")
     _executor.submit(pipeline.process_meeting, mid)
     return {"ok": True}
@@ -361,6 +365,9 @@ def api_summary_export(mid: str, fmt: str):
 @app.get("/t/{mid}/audio")
 def api_audio(mid: str):
     m = _meeting_or_404(mid)
+    if not store.has_audio(m):
+        raise HTTPException(404, "the recording for this meeting has been deleted; "
+                                 "the transcript and summary are unaffected")
     return FileResponse(store.meeting_dir(mid) / m["audio"])
 
 

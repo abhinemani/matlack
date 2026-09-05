@@ -118,16 +118,21 @@
     </div>
   </div>
 
+  {% if has_audio %}
   <div class="player">
     <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></svg></span>
     <div class="meta-col"><b>{{ m.title }}</b><span>Click a timestamp to jump</span></div>
     <audio controls preload="none" src="/t/{{ m.id }}/audio" id="audio"></audio>
   </div>
+  {% else %}
+  <p class="fine no-audio">The recording for this meeting has been deleted. The transcript and summary are kept; playback is off.</p>
+  {% endif %}
   {% endif %}
 </main>
 
 <script>
 const meeting = {{ meeting_json|safe }};
+const hasAudio = {{ has_audio|tojson }};
 const id = meeting.id;
 const colors = {};
 function color(label) {
@@ -280,7 +285,7 @@ function renderStream() {
     const opts = labels.map(l => `<option value="${l}" ${l === u.speaker ? 'selected' : ''}>${esc(nameOf(l))}</option>`).join('');
     return `<div class="u ${same ? 'same' : ''} ${hit ? '' : 'hide'}" style="--c:${color(u.speaker)}" data-i="${i}" data-start="${u.start}" data-end="${u.end ?? ''}">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3.5-6 7-6s7 2.5 7 6"/></svg></div>
-      <div class="t"><a href="#" title="Play from here" onclick="seek(${u.start});return false">${fmt(u.start)}</a></div>
+      <div class="t">${hasAudio ? `<a href="#" title="Play from here" onclick="seek(${u.start});return false">${fmt(u.start)}</a>` : fmt(u.start)}</div>
       <div class="body">
         <div class="name"><select aria-label="Speaker for this line" onchange="reassign(${i}, this.value)">${opts}</select></div>
         <div class="text" contenteditable="plaintext-only" spellcheck="false" onblur="editText(${i}, this.innerText)">${highlight(u.text)}</div>
@@ -331,7 +336,7 @@ async function addSpeaker() {
   meeting.speakers = r.speakers; color(r.label);
   render();
 }
-function seek(ms) { const a = document.getElementById('audio'); a.currentTime = ms / 1000; a.play(); }
+function seek(ms) { const a = document.getElementById('audio'); if (!a) return; a.currentTime = ms / 1000; a.play(); }
 
 // Plain-text transcript, same shape as the .txt export: one paragraph per
 // speaker turn, headed by name and timestamp.

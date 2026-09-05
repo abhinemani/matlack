@@ -200,6 +200,9 @@ def cmd_guides(a):
 
 
 def cmd_retry(a):
+    if not store.has_audio(store.load(a.id)):
+        sys.exit(f"{a.id}: the recording has been deleted, so it can't be transcribed again. "
+                 "The transcript and summary are still there.")
     store.set_status(a.id, "queued")
     pipeline.run_batch(workers=1, ids=[a.id])
 
@@ -210,6 +213,12 @@ def _print_report(r: dict):
             print(f"  {k:8} {', '.join(r[k])}")
     if r["unchanged"]:
         print(f"  {'same':8} {len(r['unchanged'])} meeting(s)")
+    if r.get("audio"):
+        print(f"  {'audio':8} {', '.join(r['audio'])}")
+    if r.get("audio_skipped"):
+        print(f"  {'no audio':8} {', '.join(r['audio_skipped'])}  (text only, see above)")
+    if r.get("audio_mb"):
+        print(f"  {'size':8} recordings {r['audio_mb']:.0f} MB of {r['audio_cap_mb']} MB budget")
     if r["pushed"]:
         print("pushed" + (f"; the site updates in about a minute: {r['url']}" if r["url"] else "."))
     elif r["commit"]:

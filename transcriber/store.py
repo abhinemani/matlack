@@ -48,6 +48,14 @@ def meeting_dir(mid: str) -> Path:
     return MEETINGS_DIR / mid
 
 
+def has_audio(meeting: dict) -> bool:
+    """Whether the recording is still on disk. Deleting it to save space is
+    fine: the transcript and summary live in meeting.json and stay usable;
+    only playback (and re-transcribing) need the file."""
+    name = meeting.get("audio")
+    return bool(name) and (meeting_dir(meeting["id"]) / name).is_file()
+
+
 def meeting_path(mid: str) -> Path:
     return meeting_dir(mid) / "meeting.json"
 

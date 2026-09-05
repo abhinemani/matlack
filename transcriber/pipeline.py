@@ -27,6 +27,9 @@ def process_meeting(mid: str) -> dict:
     try:
         m = store.load(mid)
         audio = store.meeting_dir(mid) / m["audio"]
+        if not audio.is_file():
+            raise FileNotFoundError(f"the recording {m['audio']} was deleted, so this meeting "
+                                    "can't be transcribed again; its transcript and summary are kept")
 
         store.set_status(mid, "uploading")
         log(f"[{mid}] uploading {audio.name}")
