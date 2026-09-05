@@ -121,8 +121,10 @@ What goes up is the transcript with confirmed names, and the summary if
 there is one. Audio, name-guess evidence and processing details stay home.
 Everything is encrypted with the passphrase before it leaves your machine,
 so GitHub only ever holds ciphertext; the site asks for the passphrase and
-decrypts in the browser. A Pages URL is public even for a private repo,
-which is why the passphrase isn't optional. If you truly want an open site,
+decrypts in the browser. Each transcript and summary page has Copy and Word
+buttons; the Word file is built in the browser too, so nothing is decrypted
+anywhere but on the reader's machine. A Pages URL is public even for a
+private repo, which is why the passphrase isn't optional. If you truly want an open site,
 set `PUBLISH_PUBLIC=1` instead of a passphrase.
 
 The site checkout lives in `data/published/` and is managed for you. The

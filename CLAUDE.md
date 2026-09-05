@@ -41,6 +41,8 @@ transcripts. Read this before doing anything.
 - "Take <meeting> off the site" → `python transcribe.py unpublish <id>`
 - "What's public" → `python transcribe.py list` (marks public meetings and
   whether they have unpushed changes)
+- "Word doc from the site" → no command; readers use the Word button on the
+  site's transcript or summary page (built in the browser by `site/docx.js`)
 
 ## Unfinished setup
 `HANDOFF.md` lists what a previous session left for the laptop to finish

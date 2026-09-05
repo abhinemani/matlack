@@ -140,7 +140,10 @@ function meetingHeader(m, page) {
     ? `<a class="btn primary" href="#/m/${esc(m.id)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Transcript</a>`
     : has ? `<a class="btn primary" href="#/m/${esc(m.id)}/summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>View summary</a>` : '';
   return `<header class="top"><div>${crumb}<div class="title-row"><h1>${esc(m.title)}</h1></div><div class="meta">${meta}</div></div>
-    <div class="toolbar"><button class="btn" id="copyBtn" title="Copy as plain text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>${action}</div></header>`;
+    <div class="toolbar"><div class="group">
+      <button class="btn" id="copyBtn" title="Copy as plain text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
+      <button class="btn" id="docxBtn" title="Download as a Word document"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span>Word</span></button>
+    </div>${action}</div></header>`;
 }
 
 function transcriptText(m) {
@@ -171,6 +174,16 @@ function wireCopy(text) {
     setTimeout(() => { l.textContent = 'Copy'; b.classList.remove('good'); }, 1400);
   };
 }
+function wireDocx(filename, build) {
+  const b = document.getElementById('docxBtn'); if (!b) return;
+  const l = b.querySelector('span');
+  b.onclick = () => {
+    try { matlackDocx.download(filename, build()); }
+    catch (e) { console.error(e); l.textContent = 'Failed'; setTimeout(() => { l.textContent = 'Word'; }, 1800); return; }
+    l.textContent = 'Saved'; b.classList.add('good');
+    setTimeout(() => { l.textContent = 'Word'; b.classList.remove('good'); }, 1400);
+  };
+}
 
 async function viewMeeting(id, t) {
   renderNav('meeting');
@@ -197,6 +210,7 @@ async function viewMeeting(id, t) {
       <section class="stream" id="stream"></section></div>
   </div></main>`;
   wireCopy(() => transcriptText(m));
+  wireDocx(`${m.id}.docx`, () => matlackDocx.transcript(m));
 
   let query = '';
   const highlight = text => {
@@ -258,6 +272,7 @@ async function viewSummary(id) {
     </div></div></main>`;
   document.getElementById('coverage').innerHTML = `<b>${covered}</b> of ${secs.length} sections covered`;
   wireCopy(() => summaryText(m));
+  wireDocx(`${m.id}-summary.docx`, () => matlackDocx.summary(m));
   document.querySelectorAll('.toc nav a').forEach(a => a.onclick = ev => { ev.preventDefault(); document.getElementById('s-' + a.dataset.sec)?.scrollIntoView({behavior: 'smooth', block: 'start'}); });
 }
 
