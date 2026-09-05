@@ -20,14 +20,7 @@
 /* Read-only transcript: the speaker name is a label, not a select. */
 .u .name span { font: 600 13.5px var(--sans); color: var(--c); padding: 3px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .u .t { color: var(--faint); }
-.u .t a:hover { color: var(--action); }
 .u.target { box-shadow: inset 3px 0 0 var(--c); background: var(--paper-2); }
-
-/* Encrypted recording: one button stands in for the player until it is
-   downloaded and unlocked; then the audio element takes its place. */
-.player .load { flex: 1; justify-content: center; white-space: nowrap; }
-.player .load.busy { opacity: .75; }
-.player .meta-col span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .key .sp .who { font: 500 15px var(--sans); color: var(--ink); padding: 7px 0 0; }
 .key .sp .who.unconfirmed { color: var(--warn); }
 .key .fine { padding: 0 0 6px; }

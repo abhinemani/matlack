@@ -16,22 +16,22 @@
     </a>
     <span class="brand-tag">Capture what matters</span>
     <span class="spacer"></span>
-    <div class="nav"><a href="/" aria-current="page">Meetings</a></div>
+    <div class="nav">
+      <a href="/" aria-current="page">Meetings</a>
+      {% if publishing.configured %}
+        {% if publishing.url %}<a href="{{ publishing.url }}" target="_blank" rel="noopener" title="Open the published site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>View site</a>{% endif %}
+        <span class="saved" id="pubMsg"></span>
+        <button class="btn primary" id="pubBtn" onclick="doPublish()" title="{% if publishing.waiting %}{{ publishing.waiting|length }} approved meeting(s) have changes to push{% else %}Everything approved is already on the site{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Publish</span>{% if publishing.waiting %}<span class="badge">{{ publishing.waiting|length }}</span>{% endif %}</button>
+      {% else %}
+        <span class="pub-off" title="{{ publishing.error }}">Publishing isn’t set up · see README</span>
+      {% endif %}
+    </div>
   </div>
 </nav>
 <header class="top">
   <div>
     <div class="h1-row"><h1>Meetings</h1>{% if meetings %}<span class="count">{{ meetings|length }}</span>{% endif %}</div>
     <p class="lede">Drop recordings here or in the inbox folder. Each one comes back with speakers guessed from what was said, ready for you to confirm.</p>
-  </div>
-  <div class="toolbar pub-bar">
-    <span class="saved" id="pubMsg"></span>
-    {% if publishing.configured %}
-      {% if publishing.url %}<a class="btn" href="{{ publishing.url }}" target="_blank" rel="noopener" title="Open the published site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>View site</a>{% endif %}
-      <button class="btn primary" id="pubBtn" onclick="doPublish()" title="{% if publishing.waiting %}{{ publishing.waiting|length }} approved meeting(s) have changes to push{% else %}Everything approved is already on the site{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Publish</span>{% if publishing.waiting %}<span class="badge">{{ publishing.waiting|length }}</span>{% endif %}</button>
-    {% else %}
-      <span class="pub-off" title="{{ publishing.error }}">Publishing isn’t set up yet · see README</span>
-    {% endif %}
   </div>
 </header>
 
