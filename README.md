@@ -88,16 +88,24 @@ When a meeting is ready to share, approve it and push; a small static site
 on GitHub Pages shows the approved transcripts and summaries, and nothing
 else. The site can't transcribe or edit anything.
 
-One-time setup:
+One-time setup is three lines in `.env`. The simplest arrangement uses a
+`gh-pages` branch of this very repository, so there is nothing to create:
 
-1. Create an empty **private** repository on GitHub, say `matlack-site`.
-2. In its settings, turn on Pages: *Deploy from a branch*, branch `main`,
-   folder `/ (root)`. Note the URL GitHub gives you.
-3. Add to `.env`:
+    PUBLISH_REPO=https://github.com/you/matlack
+    PUBLISH_BRANCH=gh-pages
+    PUBLISH_PASSPHRASE=a long phrase you will type to open the site
+    PUBLISH_URL=https://you.github.io/matlack
 
-       PUBLISH_REPO=git@github.com:you/matlack-site.git
-       PUBLISH_PASSPHRASE=a long phrase you will type to open the site
-       PUBLISH_URL=https://you.github.io/matlack-site
+The first publish pushes the branch along with a small GitHub Actions
+workflow that deploys it to Pages and switches Pages on for the repository.
+If GitHub declines to switch it on by itself, do it once by hand: repository
+*Settings → Pages → Source: GitHub Actions*. Later pushes deploy within a
+minute or two.
+
+If you would rather keep the site out of the code repository, create an
+empty repository (private needs a paid plan for Pages; public is fine since
+only ciphertext is stored) and point `PUBLISH_REPO` at it with
+`PUBLISH_BRANCH=main`.
 
 Then, per meeting:
 

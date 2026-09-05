@@ -224,12 +224,25 @@ def publish(push: bool = True, log=print) -> dict:
             old_site = {}
     old_files = {p.name: p.read_text() for p in (d / "m").glob("*.json")} if (d / "m").is_dir() else {}
     old_index = (d / "index.json").read_text() if (d / "index.json").exists() else None
+    # A changed passphrase (or a switch to/from encryption) means nothing on
+    # the site can be reused: re-encrypt everything.
+    same_key = bool(old_site.get("enc")) == enc
+    if enc and same_key:
+        try:
+            same_key = decrypt(old_site["check"], key).get("ok") is True
+        except Exception:
+            same_key = False
+    if not same_key:
+        old_files, old_index, old_site = {}, None, {}
 
     # Viewer files: always refreshed so the site tracks the code.
     _clean(d)
     for src in SITE_SRC.iterdir():
-        if src.is_file():
+        if src.is_file() and src.name != "pages.yml":
             shutil.copy2(src, d / src.name)
+    # The Pages deploy workflow rides along so the site repo needs no setup.
+    (d / ".github" / "workflows").mkdir(parents=True)
+    shutil.copy2(SITE_SRC / "pages.yml", d / ".github" / "workflows" / "pages.yml")
     shutil.copy2(HERE / "static" / "style.css", d / "style.css")
     shutil.copy2(HERE / "static" / "favicon.svg", d / "favicon.svg")
     (d / ".nojekyll").write_text("")
