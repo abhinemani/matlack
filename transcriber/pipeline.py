@@ -112,20 +112,16 @@ def reguess(mid: str) -> dict:
 def suggest_repairs(mid: str) -> dict:
     """The review pass: Claude proposes line and name fixes for a person to
     apply. Best effort; a failure leaves the transcript as it is."""
-    m = store.load(mid)
-    m["repairs"] = {"status": "running", "created": time.time(), "items": []}
-    store.save(m)  # so a restart knows to pick this up again
+    # Marked running first, so a restart knows to pick this up again.
+    m = store.modify(mid, lambda m: m.__setitem__(
+        "repairs", {"status": "running", "created": time.time(), "items": []}))
     try:
         block = repair.propose(m)
     except Exception as e:
         log(f"[{mid}] repair suggestions failed: {e}")
-        m = store.load(mid)
-        m["repairs"] = {"status": "error", "error": str(e), "created": time.time(), "items": []}
-        store.save(m)
-        return m
-    m = store.load(mid)
-    m["repairs"] = block
-    store.save(m)
+        return store.modify(mid, lambda m: m.__setitem__(
+            "repairs", {"status": "error", "error": str(e), "created": time.time(), "items": []}))
+    m = store.modify(mid, lambda m: m.__setitem__("repairs", block))
     n = len(block["items"])
     log(f"[{mid}] {n} fix{'es' if n != 1 else ''} suggested" if n else f"[{mid}] no fixes suggested")
     return m

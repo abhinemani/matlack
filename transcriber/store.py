@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -76,14 +77,31 @@ def load(mid: str) -> dict:
     return json.loads(p.read_text())
 
 
+_write_lock = threading.RLock()
+
+
 def save(meeting: dict) -> dict:
     meeting["updated"] = time.time()
     p = meeting_path(meeting["id"])
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(meeting, indent=2, ensure_ascii=False))
-    tmp.replace(p)
+    # Own temp file per writer, and one writer at a time: the web server runs
+    # several passes on one meeting in parallel (summary, review) and two
+    # writers sharing a temp name raced each other's rename.
+    tmp = p.with_name(f".{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    with _write_lock:
+        tmp.write_text(json.dumps(meeting, indent=2, ensure_ascii=False))
+        tmp.replace(p)
     return meeting
+
+
+def modify(mid: str, fn) -> dict:
+    """Read-modify-write under the lock, so two passes updating different
+    fields of the same meeting can't overwrite each other. `fn(meeting)`
+    edits in place."""
+    with _write_lock:
+        m = load(mid)
+        fn(m)
+        return save(m)
 
 
 def list_meetings() -> list[dict]:

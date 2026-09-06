@@ -234,21 +234,17 @@ def run(mid: str, guide_id: str | None = None) -> dict:
     """Summarize a meeting and save the result into its meeting.json.
     Marks the summary as running first so the web page can show progress."""
     guide = load_guide(guide_id)
-    m = store.load(mid)
-    m["summary"] = {"status": "running", "error": None, "guide": guide["id"],
-                    "guide_title": guide["title"], "created": time.time()}
-    store.save(m)
+    m = store.modify(mid, lambda m: m.__setitem__("summary", {
+        "status": "running", "error": None, "guide": guide["id"],
+        "guide_title": guide["title"], "created": time.time()}))
     try:
         result = summarize(m, guide)
     except Exception as e:
-        m = store.load(mid)
-        m["summary"] = {"status": "error", "error": str(e), "guide": guide["id"],
-                        "guide_title": guide["title"], "created": time.time()}
-        store.save(m)
+        store.modify(mid, lambda m: m.__setitem__("summary", {
+            "status": "error", "error": str(e), "guide": guide["id"],
+            "guide_title": guide["title"], "created": time.time()}))
         raise
-    m = store.load(mid)
-    m["summary"] = result
-    store.save(m)
+    m = store.modify(mid, lambda m: m.__setitem__("summary", result))
     from . import export
     export.write_summary(m, "md")
     return m
