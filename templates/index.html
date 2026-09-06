@@ -170,12 +170,13 @@ async function doPublish() {
   const msg = document.getElementById('pubMsg');
   btn.disabled = false; label.textContent = 'Publish';
   if (rep.pushed) {
-    msg.textContent = `Pushed ${n} change${n === 1 ? '' : 's'} · live in about a minute`;
+    // n is meetings; a push with none means the viewer itself was refreshed.
+    msg.textContent = (n ? `Pushed ${n} meeting${n === 1 ? '' : 's'}` : 'Pushed a viewer update') + ' · live in a minute';
     msg.classList.add('show');
     setTimeout(() => location.reload(), 5000);  // rows pick up their new state
   } else {
     // Nothing waiting. Say so and stay put; a reload here looked like nothing happened.
-    msg.textContent = 'Nothing to push · the site already matches';
+    msg.textContent = 'Nothing to push · site is current';
     msg.classList.add('show');
     clearTimeout(window.__pubMsgTimer);
     window.__pubMsgTimer = setTimeout(() => msg.classList.remove('show'), 7000);
