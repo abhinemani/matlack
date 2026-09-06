@@ -118,11 +118,34 @@ select:hover { border-color: var(--action); }
 .drop .icon svg { width: 18px; height: 18px; }
 .drop p { margin: 0; font-weight: 500; }
 .drop small { color: var(--muted); font-weight: 400; display: block; margin-top: 4px; }
-.drop .who-field { flex: 1 1 100%; order: 3; display: block; border-top: 1px dashed var(--rule-soft); padding-top: 16px; margin-top: 2px; }
-.drop .who-field > span { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
-.drop .who-field em { font-style: normal; font-weight: 400; color: var(--faint); margin-left: 4px; }
-.drop .who-field input { max-width: 640px; }
-.drop .who-field small { margin-top: 6px; font-size: 12.5px; }
+.drop .who-row { flex: 1 1 100%; order: 3; display: flex; gap: 18px; flex-wrap: wrap; border-top: 1px dashed var(--rule-soft); padding-top: 16px; margin-top: 2px; }
+.who-field { display: block; flex: 1 1 320px; min-width: 0; }
+.who-field.count-field { flex: 0 1 180px; }
+input[type=number] { font: 15px var(--sans); border: 1px solid var(--rule); border-radius: 8px; padding: 7px 10px; width: 100%; background: var(--paper); color: var(--ink); transition: border-color .12s, box-shadow .12s; }
+input[type=number]:hover { border-color: #c9c5bc; }
+input[type=number]:focus { border-color: var(--action); box-shadow: 0 0 0 3px var(--action-soft); outline: none; }
+.who-field > span { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.who-field em { font-style: normal; font-weight: 400; color: var(--faint); margin-left: 4px; }
+.who-field input { width: 100%; max-width: 640px; }
+.who-field small { display: block; margin-top: 6px; font-size: 12.5px; color: var(--muted); font-weight: 400; }
+
+/* A recording that landed in the inbox and is waiting to be told who was there. */
+.ask-card { margin-top: 22px; padding: 20px 22px 18px; background: var(--paper); border: 1px solid var(--warn-rule, var(--rule)); border-left: 4px solid var(--warn); border-radius: var(--radius); box-shadow: var(--shadow-md); }
+.ask-head { display: flex; gap: 14px; align-items: flex-start; }
+.ask-ico { flex: none; width: 38px; height: 38px; border-radius: 9px; background: var(--warn-bg); color: var(--warn); display: flex; align-items: center; justify-content: center; }
+.ask-ico svg { width: 18px; height: 18px; }
+.ask-head h2 { font: 600 17px/1.3 var(--serif); text-transform: none; letter-spacing: 0; color: var(--ink); margin: 6px 0 4px; }
+.ask-head p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.ask-fields { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; }
+.ask-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.ask-actions .danger { margin-left: auto; }
+.people-card .ask-fields { margin-top: 8px; }
+
+/* Lines the naming pass flagged as holding two people. */
+.merged { margin: 10px 0 4px; padding: 10px 12px; background: var(--warn-bg); border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.merged a { color: var(--action); font-variant-numeric: tabular-nums; }
+.merged .fine { display: block; margin-top: 2px; }
+.u.target { box-shadow: inset 3px 0 0 var(--c); background: var(--paper-2); }
 .watch { color: var(--muted); font-size: 13px; margin-top: 12px; line-height: 1.6; }
 .watch code { background: var(--page); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--rule); font: 12px var(--mono); overflow-wrap: anywhere; }
 
