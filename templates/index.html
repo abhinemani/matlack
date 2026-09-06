@@ -21,7 +21,7 @@
       {% if publishing.configured %}
         {% if publishing.url %}<a href="{{ publishing.url }}" target="_blank" rel="noopener" title="Open the published site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>View site</a>{% endif %}
         <span class="saved" id="pubMsg"></span>
-        <button class="btn primary" id="pubBtn" onclick="doPublish()" title="{% if publishing.waiting %}{{ publishing.waiting|length }} approved meeting(s) have changes to push{% else %}Everything approved is already on the site{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Publish</span>{% if publishing.waiting %}<span class="badge">{{ publishing.waiting|length }}</span>{% endif %}</button>
+        <button class="btn primary" id="pubBtn" onclick="doPublish()" title="{% if publishing.waiting %}{{ publishing.waiting|length }} public meeting(s) have changes to push. {% else %}Everything public is already on the site. {% endif %}Only meetings marked public go up; the button offers to mark finished ones."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Publish</span>{% if publishing.waiting %}<span class="badge">{{ publishing.waiting|length }}</span>{% endif %}</button>
       {% else %}
         <span class="pub-off" title="{{ publishing.error }}">Publishing isn’t set up · see README</span>
       {% endif %}
@@ -118,6 +118,10 @@
         <div class="cell stat"><span class="status {{ m.status }}">{{ m.status }}{% if m.error %} <span class="detail">· {{ m.error[:80] }}</span>{% endif %}</span></div>
         <div class="cell actions">
           {% if m.status == "error" %}<button class="quiet" onclick="retry('{{ m.id }}')">Retry</button>{% endif %}
+          {% if m.status == "ready" and publishing.configured %}
+            {% if m.pub_state == 'off' %}<button class="quiet" onclick="setPublic('{{ m.id }}', '{{ m.title|e }}', true)" title="Include this meeting when the site is published">Make public</button>
+            {% else %}<button class="quiet" onclick="setPublic('{{ m.id }}', '{{ m.title|e }}', false)" title="Take this meeting off the site on the next publish">Make private</button>{% endif %}
+          {% endif %}
           <button class="quiet" onclick="rename('{{ m.id }}', '{{ m.title|e }}')">Rename</button>
           <button class="quiet danger" onclick="remove('{{ m.id }}', '{{ m.title|e }}')">Delete</button>
         </div>
@@ -160,8 +164,31 @@ async function startMeeting(id, withDetails) {
   if (!r.ok) { alert('That didn\'t start: ' + (await r.text())); return; }
   location.reload();
 }
+// Finished meetings that haven't been marked public. Publish only pushes public
+// ones, so these are what "nothing to push" usually means.
+const notPublic = [{% for m in meetings if m.status == 'ready' and m.pub_state == 'off' %}{id: {{ m.id|tojson }}, title: {{ m.title|tojson }}}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+async function setPublic(id, title, want) {
+  if (!want && !confirm(`Take “${title}” off the published site on the next publish?`)) return;
+  const r = await fetch(`/api/meetings/${id}/public`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({public: want})});
+  if (!r.ok) { alert('That didn\'t save: ' + (await r.text())); return; }
+  location.reload();
+}
+
 async function doPublish() {
   const btn = document.getElementById('pubBtn'), label = btn.querySelector('span');
+  if (notPublic.length) {
+    // The usual case behind "nothing to push": the new meeting was never made public.
+    const names = notPublic.map(m => `“${m.title}”`).join(', ');
+    const ok = confirm(`${notPublic.length === 1 ? 'This meeting isn\'t' : 'These meetings aren\'t'} marked public yet: ${names}.\n\nMake ${notPublic.length === 1 ? 'it' : 'them'} public and push? (Cancel pushes only what is already public.)`);
+    if (ok) {
+      btn.disabled = true; label.textContent = 'Approving…';
+      for (const m of notPublic) {
+        const r = await fetch(`/api/meetings/${m.id}/public`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({public: true})});
+        if (!r.ok) { alert(`Couldn't make “${m.title}” public: ` + (await r.text())); btn.disabled = false; label.textContent = 'Publish'; return; }
+      }
+    }
+  }
   btn.disabled = true; label.textContent = 'Publishing…';
   const r = await fetch('/api/publish', {method: 'POST'});
   if (!r.ok) { alert('Publish failed: ' + (await r.text())); btn.disabled = false; label.textContent = 'Publish'; return; }
@@ -176,7 +203,9 @@ async function doPublish() {
     setTimeout(() => location.reload(), 5000);  // rows pick up their new state
   } else {
     // Nothing waiting. Say so and stay put; a reload here looked like nothing happened.
-    msg.textContent = 'Nothing to push · site is current';
+    msg.textContent = notPublic.length
+      ? `Nothing to push · ${notPublic.length} meeting${notPublic.length === 1 ? ' isn\'t' : 's aren\'t'} public`
+      : 'Nothing to push · site is current';
     msg.classList.add('show');
     clearTimeout(window.__pubMsgTimer);
     window.__pubMsgTimer = setTimeout(() => msg.classList.remove('show'), 7000);

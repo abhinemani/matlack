@@ -45,6 +45,8 @@ transcripts. Read this before doing anything.
 - "Publish <meeting> / put it on the site" → `python transcribe.py publish <id>`
   (approves it and pushes the read-only site; needs PUBLISH_* in `.env`)
 - "Push the site / publish my edits" → `python transcribe.py publish`
+  (only meetings marked public go up; a newly transcribed meeting is
+  private until `publish <id>` or Make public in the web page)
 - "Take <meeting> off the site" → `python transcribe.py unpublish <id>`
 - "What's public" → `python transcribe.py list` (marks public meetings and
   whether they have unpushed changes)

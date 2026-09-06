@@ -168,9 +168,12 @@ Then, per meeting:
     python transcribe.py publish                    # push again after edits
     python transcribe.py unpublish budget-kickoff   # take it down
 
-Or in the web page: **Make public** on a transcript, then **Publish** on the
-Meetings page. Rows show whether an approved meeting has changes that
-haven't been pushed yet.
+Or in the web page: **Make public** on a meeting's row or its transcript
+page, then **Publish** in the top bar. A new transcript is private until
+you do that, so a fresh meeting never goes up by accident; if you press
+Publish while finished meetings are still private, it names them and
+offers to make them public and push in one go. Rows show whether a public
+meeting has changes that haven't been pushed yet.
 
 What goes up is the transcript with confirmed names, the summary if there
 is one, and the recording, so timestamps on the site play the audio just as
