@@ -74,12 +74,12 @@ function renderGate(bad) {
   app.innerHTML = `<div class="gate"><div class="gate-card">
     <div class="gate-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
     <h1>Transcripts</h1>
-    <p>These pages are encrypted. Enter the passphrase to read them; nothing is sent anywhere, the unlocking happens in your browser.</p>
+    <p>Enter the passphrase to open these transcripts.</p>
     <form id="gateForm">
       <input type="password" id="pass" placeholder="Passphrase" autocomplete="current-password" autofocus>
       <div class="row"><label><input type="checkbox" id="persist"> Remember on this device</label>
         <button class="primary" type="submit">Open</button></div>
-      ${bad ? '<p class="bad">That passphrase didn’t work.</p>' : ''}
+      ${bad ? '<p class="bad">Wrong passphrase.</p>' : ''}
     </form>
   </div></div>`;
   document.getElementById('gateForm').onsubmit = async ev => {
@@ -91,9 +91,7 @@ function renderGate(bad) {
   };
 }
 function renderNav(extra = '') {
-  const lock = site && site.enc ? `<button class="lock" id="lock" title="Forget the passphrase on this device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></svg>Lock</button>` : '';
-  nav.innerHTML = `<a href="#/" ${extra ? '' : 'aria-current="page"'}>Meetings</a>${lock}`;
-  const b = document.getElementById('lock'); if (b) b.onclick = forget;
+  nav.innerHTML = `<a href="#/" ${extra ? '' : 'aria-current="page"'}>Meetings</a>`;
 }
 
 // --- views -----------------------------------------------------------------
@@ -114,13 +112,14 @@ async function viewList() {
     </div>`).join('');
   app.innerHTML = `<header class="top"><div>
       <div class="h1-row"><h1>Meetings</h1>${ms.length ? `<span class="count">${ms.length}</span>` : ''}</div>
-      <p class="lede">Transcripts and summaries that have been reviewed and published. Names were confirmed by hand; summaries follow an interview guide.</p>
+      <p class="lede">Interview transcripts and summaries.</p>
     </div></header>
     <main class="wrap">${ms.length ? `<div class="list-head"><h2>Published</h2><span class="sub">Newest first</span></div>
       <div class="list"><div class="cols" aria-hidden="true"><span>Meeting</span><span>Speakers</span><span>Length</span><span>Status</span><span></span></div>${rows}</div>`
-      : '<p class="empty"><b>Nothing published yet.</b>Approved meetings will appear here.</p>'}
-      ${index.generated ? `<p class="published-note">Last published ${esc(new Date(index.generated * 1000).toLocaleString())}.</p>` : ''}
+      : '<p class="empty"><b>Nothing here yet.</b></p>'}
+      <p class="published-note">${index.generated ? `Updated ${esc(new Date(index.generated * 1000).toLocaleString())}. ` : ''}${site.enc && savedPass() ? '<a href="#" id="forget">Forget the passphrase on this device</a>' : ''}</p>
     </main>`;
+  const f = document.getElementById('forget'); if (f) f.onclick = ev => { ev.preventDefault(); forget(); };
 }
 
 function meetingHeader(m, page) {
@@ -191,7 +190,7 @@ async function viewMeeting(id, t) {
     <details class="key" id="key" open><summary class="key-head"><h2>Who's speaking</h2>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
       <div class="key-body">${key_}</div>
-      ${Object.values(m.speakers).some(s => !s.confirmed) ? '<p class="fine key-body">Amber names are best guesses that were not confirmed.</p>' : ''}
+      ${Object.values(m.speakers).some(s => !s.confirmed) ? '<p class="fine key-body">Names in amber are guesses.</p>' : ''}
     </details>
     <div class="stream-wrap"><div class="stream-head"><h2>Transcript</h2><span class="n" id="lineCount"></span>
       <label class="find"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -199,7 +198,7 @@ async function viewMeeting(id, t) {
       <section class="stream" id="stream"></section></div>
   </div>${audio ? `<div class="player" id="player">
     <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></svg></span>
-    <div class="meta-col"><b>${esc(m.title)}</b><span id="playerHint">${audio.enc ? 'Loads and unlocks in your browser' : 'Click a timestamp to jump'}</span></div>
+    <div class="meta-col"><b>${esc(m.title)}</b><span id="playerHint">Click a timestamp to play from there</span></div>
     ${audio.enc ? `<button class="btn primary load" id="loadAudio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M12 16l-4-4M12 16l4-4"/><path d="M4 18v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1"/></svg><span>Load recording · ${mb(audio.size)}</span></button>` : ''}
     <audio controls preload="none" id="audio" ${audio.enc ? 'hidden' : `src="${esc(audio.file)}"`}></audio>
   </div>` : ''}</main>`;
@@ -227,16 +226,16 @@ async function viewMeeting(id, t) {
       }
       const buf = new Uint8Array(got); let off = 0;
       for (const c of chunks) { buf.set(c, off); off += c.length; }
-      label.textContent = 'Unlocking…';
+      label.textContent = 'Almost ready…';
       const plain = await crypto.subtle.decrypt({name: 'AES-GCM', iv: buf.subarray(0, 12)}, key, buf.subarray(12));
       const el = document.getElementById('audio');
       el.src = URL.createObjectURL(new Blob([plain], {type: audio.type}));
-      el.hidden = false; btn.remove(); hint.textContent = 'Click a timestamp to jump';
+      el.hidden = false; btn.remove();
       audioReady = true;
       return true;
     })().catch(e => {
       loading = null; btn.disabled = false; btn.classList.remove('busy');
-      label.textContent = 'Try again'; hint.textContent = `Couldn't load the recording: ${e.message}`;
+      label.textContent = 'Try again'; hint.textContent = "Couldn't load the recording.";
       return false;
     });
     return loading;
@@ -320,7 +319,7 @@ async function viewSummary(id) {
     <div class="sum-body">
       <section class="card lead"><h2 class="sec-title">Overview</h2><div class="prose big">${esc(s.overview)}</div></section>
       ${prio}${cards}${fu}
-      <p class="fine">${s.words ? `About ${s.words} words. ` : ''}Generated by ${esc(s.model || 'Claude')}${s.created ? ' on ' + new Date(s.created * 1000).toLocaleDateString(undefined, {month: 'long', day: 'numeric', year: 'numeric'}) : ''}, then reviewed. Summaries can misfile or compress a point; check anything you plan to quote against the transcript.</p>
+      <p class="fine">Generated by Claude${s.created ? ' on ' + new Date(s.created * 1000).toLocaleDateString(undefined, {month: 'long', day: 'numeric', year: 'numeric'}) : ''}. Check quotes against the transcript before using them.</p>
     </div></div></main>`;
   document.getElementById('coverage').innerHTML = `<b>${covered}</b> of ${secs.length} sections covered`;
   wireCopy(() => summaryText(m));
