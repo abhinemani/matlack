@@ -114,6 +114,7 @@
         <p class="hint">Amber names are guesses from the conversation. Edit or accept them; changes apply to every line at once. Someone missing? Pick “Someone else…” on any line, or add a speaker below.</p>
         <div id="speakers"></div>
         <div id="mergedNote"></div>
+        <div id="repairs"></div>
         <div class="people">
           <div class="label">People you know were there</div>
           <input type="text" id="people" placeholder="Names, comma-separated. Roles in parentheses." autocomplete="off" onchange="savePeople(this.value)">
@@ -338,7 +339,66 @@ function jumpTo(i) {
   document.querySelectorAll('.u.target').forEach(r => r.classList.remove('target'));
   row.classList.add('target'); row.scrollIntoView({block: 'center', behavior: 'smooth'});
 }
-function render() { renderKey(); renderMerged(); renderStream(); }
+// Fixes the review pass proposed: wrong speaker, two people on one line, a
+// misheard name. Nothing changes until one is applied here.
+function describeRepair(r) {
+  if (r.kind === 'reassign') return `Move this line to <b>${esc(r.to ? nameOf(r.to) : r.new_name + ' (new)')}</b>`;
+  if (r.kind === 'split') {
+    const who = r.second ? nameOf(r.second) : (r.second_name ? r.second_name + ' (new)' : 'the same speaker');
+    const at = r.at.length > 44 ? r.at.slice(0, 41) + '…' : r.at;
+    return `Split at “${esc(at)}”, second part to <b>${esc(who)}</b>`;
+  }
+  if (r.kind === 'replace') return `“${esc(r.find)}” → <b>“${esc(r.replace)}”</b>${r.line == null ? ' everywhere' : ''}`;
+  return esc(r.kind);
+}
+function renderRepairs() {
+  const box = document.getElementById('repairs'); if (!box) return;
+  const all = (meeting.repairs || {}).items || [];
+  const open = all.filter(r => r.status === 'proposed');
+  const done = all.filter(r => r.status === 'applied').length;
+  const busy = meeting.status !== 'ready';
+  const rows = open.map(r => {
+    const u = Number.isInteger(r.line) ? meeting.utterances[r.line] : null;
+    const where = u ? `<a href="#" onclick="jumpTo(${r.line});return false" title="Jump to this line">${fmt(u.start)}</a>` : '<span class="all">all lines</span>';
+    return `<div class="fix" data-rid="${r.id}">
+      <div class="fix-main"><span class="fix-kind ${r.kind}">${r.kind === 'reassign' ? 'speaker' : r.kind === 'split' ? 'split' : 'name'}</span> ${where} · ${describeRepair(r)}
+        <div class="fix-why">${esc(r.reason || '')}</div></div>
+      <div class="fix-actions"><button class="small good" onclick="actRepair(${r.id}, 'apply')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></svg>Apply</button>
+        <button class="small" onclick="actRepair(${r.id}, 'reject')">Dismiss</button></div>
+    </div>`;
+  }).join('');
+  box.innerHTML = `<div class="fixes">
+    <div class="fixes-head"><b>Suggested fixes</b>${open.length ? `<span class="n">${open.length}</span>` : ''}
+      <span class="spacer"></span>
+      ${open.length > 1 ? `<button class="small" onclick="applyAllRepairs()">Apply all</button>` : ''}
+      <button class="small" id="reviewBtn" onclick="reviewAgain()" ${busy ? 'disabled' : ''} title="Read the transcript again and propose a fresh list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Review again</button></div>
+    ${rows || `<p class="fine">${meeting.repairs ? (done ? `Nothing left; ${done} applied.` : 'The review pass found nothing to fix.') : 'Not reviewed yet.'}</p>`}
+  </div>`;
+}
+function takeRepairs(r) {
+  meeting.repairs = r.repairs; meeting.utterances = r.utterances; meeting.speakers = r.speakers; meeting.naming = r.naming;
+  Object.keys(meeting.speakers).sort().forEach(color);
+  flashSaved(); render();
+}
+async function actRepair(rid, action) {
+  const r = await fetch(`/api/meetings/${id}/repairs/${rid}`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action})});
+  if (!r.ok) { alert('That didn\'t work: ' + (await r.text())); return; }
+  takeRepairs(await r.json());
+}
+async function applyAllRepairs() {
+  const n = ((meeting.repairs || {}).items || []).filter(x => x.status === 'proposed').length;
+  if (!confirm(`Apply all ${n} suggested fixes?`)) return;
+  const r = await fetch(`/api/meetings/${id}/repairs-apply-all`, {method: 'POST'});
+  if (!r.ok) { alert('That didn\'t work: ' + (await r.text())); return; }
+  takeRepairs(await r.json());
+}
+async function reviewAgain() {
+  const b = document.getElementById('reviewBtn'); b.disabled = true; b.lastChild.textContent = 'Reviewing…';
+  const r = await fetch(`/api/meetings/${id}/repairs`, {method: 'POST'});
+  if (!r.ok) { alert('That didn\'t work: ' + (await r.text())); b.disabled = false; b.lastChild.textContent = 'Review again'; return; }
+  takeRepairs(await r.json());
+}
+function render() { renderKey(); renderMerged(); renderRepairs(); renderStream(); }
 document.getElementById('people').value = (meeting.people || []).join(', ');
 
 let findTimer;

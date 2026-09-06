@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from fastapi.templating import Jinja2Templates  # noqa: E402
 
-from transcriber import export, pipeline, publish, store, summarize  # noqa: E402
+from transcriber import export, pipeline, publish, repair, store, summarize  # noqa: E402
 
 HERE = Path(__file__).parent
 WORKERS = int(os.environ.get("WORKERS", "3"))
@@ -304,6 +304,48 @@ async def api_utterance(mid: str, index: int, request: Request):
         m = store.edit_utterance_text(mid, index, body["text"])
     export.write(m, "md")
     return {"ok": True, "speakers": m["speakers"]}
+
+
+def _repairs_view(m: dict) -> dict:
+    return {"repairs": m.get("repairs") or {"items": []}, "utterances": m["utterances"],
+            "speakers": m["speakers"], "naming": m.get("naming")}
+
+
+@app.post("/api/meetings/{mid}/repairs")
+def api_repairs_suggest(mid: str):
+    """Run the review pass again: Claude proposes line and name fixes."""
+    m = _meeting_or_404(mid)
+    if m["status"] != "ready":
+        raise HTTPException(409, "not transcribed yet")
+    m = pipeline.suggest_repairs(mid)
+    return _repairs_view(m)
+
+
+@app.post("/api/meetings/{mid}/repairs/{rid}")
+async def api_repair_act(mid: str, rid: int, request: Request):
+    """Apply or dismiss one proposed fix."""
+    _meeting_or_404(mid)
+    body = await request.json()
+    action = body.get("action")
+    try:
+        if action == "apply":
+            m = repair.apply(mid, rid)
+        elif action == "reject":
+            m = repair.reject(mid, rid)
+        else:
+            raise HTTPException(400, "action must be apply or reject")
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    export.write(m, "md")
+    return _repairs_view(m)
+
+
+@app.post("/api/meetings/{mid}/repairs-apply-all")
+def api_repairs_apply_all(mid: str):
+    _meeting_or_404(mid)
+    m = repair.apply_all(mid)
+    export.write(m, "md")
+    return _repairs_view(m)
 
 
 @app.get("/t/{mid}/export.{fmt}")

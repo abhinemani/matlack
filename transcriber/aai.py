@@ -38,13 +38,20 @@ def upload(path: Path, chunk_size: int = 5 * 1024 * 1024) -> str:
 
 
 def submit(audio_url: str, speech_model: str | None = None,
-           language_code: str | None = None, speakers_expected: int | None = None) -> str:
+           language_code: str | None = None, speakers_expected: int | None = None,
+           keyterms: list[str] | None = None) -> str:
     body = {
         "audio_url": audio_url,
         "speaker_labels": True,
         "punctuate": True,
         "format_text": True,
     }
+    if keyterms:
+        # Names the user gave: a nudge toward those spellings when the audio
+        # is close, not a rule. Up to 200 phrases of at most six words.
+        terms = [" ".join(t.split()) for t in keyterms if t and len(t.split()) <= 6]
+        if terms:
+            body["keyterms_prompt"] = list(dict.fromkeys(terms))[:200]
     if speakers_expected:
         # Exact count from the user; diarization then neither merges two
         # voices into one label nor splits one voice into two.

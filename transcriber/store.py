@@ -146,6 +146,17 @@ def set_people(mid: str, people: str | list | None) -> dict:
     return save(m)
 
 
+def people_names(people: list[str] | None) -> list[str]:
+    """Just the names from the people list: "Vera Zubo (budget director)"
+    gives "Vera Zubo". Used as spelling hints for the transcriber."""
+    out = []
+    for p in people or []:
+        name = re.sub(r"\s*\(.*?\)\s*", " ", p).strip(" ,-")
+        if name:
+            out.append(name)
+    return out
+
+
 def _count(n) -> int | None:
     """A speaker count typed by the user: a positive integer or nothing."""
     try:

@@ -18,6 +18,7 @@
   python transcribe.py summarize <id> --guide other-guide
   python transcribe.py export <id> --summary --format docx
   python transcribe.py guides                   # list interview guides
+  python transcribe.py repairs <id>             # fixes Claude suggested; --apply all, --apply 3 7, --reject 2, --again
   python transcribe.py retry <id>
   python transcribe.py publish <id>             # approve a meeting and push the site
   python transcribe.py publish                  # push everything approved (after edits)
@@ -32,7 +33,7 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from transcriber import export, pipeline, publish, store, summarize  # noqa: E402
+from transcriber import export, pipeline, publish, repair, store, summarize  # noqa: E402
 
 
 def _interactive(a) -> bool:
@@ -212,6 +213,40 @@ def cmd_guides(a):
         print(f"{g['id']:30} {g['title']}  ({g['sections']} sections)")
 
 
+def cmd_repairs(a):
+    """Suggested fixes from the review pass: list them, apply some or all,
+    dismiss some, or ask for a fresh set."""
+    m = store.load(a.id)
+    if a.again:
+        if m["status"] != "ready":
+            sys.exit(f"{a.id} is not transcribed yet (status: {m['status']})")
+        print("Reviewing the transcript for fixes…")
+        m = pipeline.suggest_repairs(a.id)
+    if a.apply:
+        ids = None if "all" in a.apply else [int(x) for x in a.apply]
+        if ids is None:
+            m = repair.apply_all(a.id)
+        else:
+            for rid in ids:
+                m = repair.apply(a.id, rid)
+        export.write(m, "md")
+    for rid in a.reject or []:
+        m = repair.reject(a.id, int(rid))
+    items = (m.get("repairs") or {}).get("items", [])
+    if not items:
+        print("No fixes suggested." + ("" if m.get("repairs") else " Run with --again to review the transcript."))
+        return
+    for it in items:
+        u = m["utterances"][it["line"]] if isinstance(it.get("line"), int) and it["line"] < len(m["utterances"]) else None
+        where = f"#{it['line']} {store.fmt_ts(u['start'])}" if u else "all lines"
+        print(f"  {it['id']:3} {it['status']:9} {where:14} {repair.describe(m, it)}")
+        if it.get("reason") and it["status"] == "proposed":
+            print(f"      {it['reason']}")
+    n = len(repair.pending(m))
+    if n:
+        print(f"{n} waiting. Apply with: python transcribe.py repairs {a.id} --apply all  (or --apply 3 7)")
+
+
 def cmd_retry(a):
     if not store.has_audio(store.load(a.id)):
         sys.exit(f"{a.id}: the recording has been deleted, so it can't be transcribed again. "
@@ -328,6 +363,13 @@ def main(argv=None):
     s.set_defaults(fn=cmd_summarize)
 
     sub.add_parser("guides", help="list interview guides").set_defaults(fn=cmd_guides)
+
+    s = sub.add_parser("repairs", help="fixes Claude suggests after transcription; apply or dismiss them")
+    s.add_argument("id")
+    s.add_argument("--apply", nargs="+", metavar="ID|all", help="apply these fixes (or all)")
+    s.add_argument("--reject", nargs="+", metavar="ID", help="dismiss these fixes")
+    s.add_argument("--again", action="store_true", help="review the transcript again for a fresh list")
+    s.set_defaults(fn=cmd_repairs)
 
     s = sub.add_parser("retry"); s.add_argument("id"); s.set_defaults(fn=cmd_retry)
 

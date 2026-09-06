@@ -141,6 +141,22 @@ input[type=number]:focus { border-color: var(--action); box-shadow: 0 0 0 3px va
 .ask-actions .danger { margin-left: auto; }
 .people-card .ask-fields { margin-top: 8px; }
 
+/* Fixes proposed by the review pass, applied one at a time. */
+.fixes { border-top: 1px solid var(--rule-soft); margin-top: 12px; padding-top: 12px; }
+.fixes-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fixes-head b { font-size: 13px; font-weight: 600; color: var(--ink); }
+.fixes-head .n { font: 600 11px var(--sans); color: var(--action); background: var(--action-soft); border-radius: 999px; padding: 1px 7px; }
+.fixes-head .spacer { flex: 1; }
+.fix { padding: 9px 0; border-top: 1px dashed var(--rule-soft); font-size: 13px; line-height: 1.45; }
+.fix:first-of-type { border-top: 0; }
+.fix-main a { color: var(--action); text-decoration: none; font-variant-numeric: tabular-nums; }
+.fix-main .all { color: var(--muted); }
+.fix-kind { display: inline-block; font: 600 10.5px var(--sans); text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 5px; background: var(--page); color: var(--muted); margin-right: 2px; vertical-align: 1px; }
+.fix-kind.split { background: var(--warn-bg); color: var(--warn); }
+.fix-kind.reassign { background: var(--action-soft); color: var(--action); }
+.fix-why { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+.fix-actions { display: flex; gap: 6px; margin-top: 7px; }
+
 /* Lines the naming pass flagged as holding two people. */
 .merged { margin: 10px 0 4px; padding: 10px 12px; background: var(--warn-bg); border-radius: 8px; font-size: 13px; line-height: 1.5; }
 .merged a { color: var(--action); font-variant-numeric: tabular-nums; }

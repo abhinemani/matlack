@@ -101,6 +101,30 @@ The speaker panel also lists lines where the naming pass thinks two
 people's turns were run together by the diarizer; click one to jump there
 and reassign or split it by hand.
 
+## What happens to a recording
+
+1. You say who was there and how many spoke (optional, either place).
+2. AssemblyAI transcribes and separates the voices. It gets the head count
+   as an exact speaker count and the names as spelling hints, a nudge
+   toward "Alicia" over "Lucia" when the audio is close, not a rule.
+3. Claude reads the transcript and works out who each voice is, citing the
+   lines that support each guess and flagging lines that look like two
+   people run together.
+4. Claude reads it once more as a reviewer and proposes concrete fixes:
+   a line given to the wrong voice, a merged line to split at a given
+   phrase, a misheard name to replace. Nothing is changed by itself. The
+   proposals sit under **Suggested fixes** in the speaker panel with Apply
+   and Dismiss on each, or in the terminal:
+
+       python transcribe.py repairs budget-kickoff              # list them
+       python transcribe.py repairs budget-kickoff --apply all  # or --apply 3 7
+       python transcribe.py repairs budget-kickoff --reject 2
+       python transcribe.py repairs budget-kickoff --again      # fresh review
+
+   Applying a split moves every later line number along, so the remaining
+   proposals still point at the right lines. Both Claude passes together
+   cost on the order of twenty cents for an hour-long meeting.
+
 ## Publishing a read-only site
 
 This section is optional. Everything above runs entirely on your machine

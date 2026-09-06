@@ -29,6 +29,10 @@ transcripts. Read this before doing anything.
 - "C and B are the same person" → `python transcribe.py merge <id> C B`
 - "Line 42 is actually Mark" → `python transcribe.py reassign <id> 42 A`
   (find the line number with `show <id> --full`)
+- "What fixes did Claude suggest / apply them" → `python transcribe.py repairs <id>`
+  (review-pass proposals: wrong speaker, merged line to split, misheard
+  name; `--apply all` or `--apply 3 7`, `--reject 2`, `--again` for a fresh
+  list; the web page shows the same list under "Suggested fixes")
 - "Give me a Word doc" → `python transcribe.py export <id> --format docx`
 - "Summarize the interview" → `python transcribe.py summarize <id>`
   (follows `guides/efficiency-review.md`; result in meeting.json under

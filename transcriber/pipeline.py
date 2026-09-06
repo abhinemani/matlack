@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import aai, export, naming, store
+from . import aai, export, naming, repair, store
 
 _in_flight: set[str] = set()
 _lock = threading.Lock()
@@ -38,7 +38,8 @@ def process_meeting(mid: str) -> dict:
         store.set_status(mid, "transcribing")
         tid = aai.submit(url, speech_model=os.environ.get("AAI_SPEECH_MODEL") or None,
                          language_code=os.environ.get("AAI_LANGUAGE") or None,
-                         speakers_expected=m.get("speakers_expected"))
+                         speakers_expected=m.get("speakers_expected"),
+                         keyterms=store.people_names(m.get("people")))
         store.set_status(mid, "transcribing", aai_id=tid)
         log(f"[{mid}] transcribing ({tid})")
         t = aai.wait(tid)
@@ -69,7 +70,8 @@ def process_meeting(mid: str) -> dict:
         store.save(m)
         export.write(m, "md")
         log(f"[{mid}] ready")
-        return m
+        suggest_repairs(mid)
+        return store.load(mid)
     except Exception as e:
         log(f"[{mid}] error: {e}")
         store.set_status(mid, "error", error=str(e))
@@ -101,6 +103,24 @@ def reguess(mid: str) -> dict:
     store.save(m)
     export.write(m, "md")
     log(f"[{mid}] guessed names again ({len(m.get('people') or [])} people given)")
+    suggest_repairs(mid)
+    return store.load(mid)
+
+
+def suggest_repairs(mid: str) -> dict:
+    """The review pass: Claude proposes line and name fixes for a person to
+    apply. Best effort; a failure leaves the transcript as it is."""
+    m = store.load(mid)
+    try:
+        block = repair.propose(m)
+    except Exception as e:
+        log(f"[{mid}] repair suggestions failed: {e}")
+        return m
+    m = store.load(mid)
+    m["repairs"] = block
+    store.save(m)
+    n = len(block["items"])
+    log(f"[{mid}] {n} fix{'es' if n != 1 else ''} suggested" if n else f"[{mid}] no fixes suggested")
     return m
 
 
