@@ -119,8 +119,19 @@ select:hover { border-color: var(--action); }
 .drop p { margin: 0; font-weight: 500; }
 .drop small { color: var(--muted); font-weight: 400; display: block; margin-top: 4px; }
 .drop .who-row { flex: 1 1 100%; order: 3; display: flex; gap: 18px; flex-wrap: wrap; border-top: 1px dashed var(--rule-soft); padding-top: 16px; margin-top: 2px; }
+/* Files picked but not yet sent: listed with what they'll carry, then Start. */
+.drop .chosen { flex: 1 1 100%; order: 4; border-top: 1px dashed var(--rule-soft); padding-top: 14px; }
+.chosen-files { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.chosen-file { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.chosen-file svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.chosen-file b { font-weight: 500; overflow-wrap: anywhere; }
+.chosen-file span { color: var(--faint); font-size: 12.5px; }
+.chosen-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chosen-with { color: var(--muted); font-size: 13px; }
+.chosen-actions .quiet { margin-left: auto; }
 .who-field { display: block; flex: 1 1 320px; min-width: 0; }
 .who-field.count-field { flex: 0 1 180px; }
+.who-field select { width: 100%; font-size: 15px; padding: 7px 30px 7px 10px; border-radius: 8px; }
 input[type=number] { font: 15px var(--sans); border: 1px solid var(--rule); border-radius: 8px; padding: 7px 10px; width: 100%; background: var(--paper); color: var(--ink); transition: border-color .12s, box-shadow .12s; }
 input[type=number]:hover { border-color: #c9c5bc; }
 input[type=number]:focus { border-color: var(--action); box-shadow: 0 0 0 3px var(--action-soft); outline: none; }
