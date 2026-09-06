@@ -264,7 +264,7 @@ def cmd_clean(a):
         return
     if m["status"] != "ready":
         sys.exit(f"{a.id} is not transcribed yet (status: {m['status']})")
-    print(f"Tidying with {cleanup.MODEL}…")
+    print(f"Tidying with {store.model_id(m)}…")
     b = pipeline.tidy(a.id)
     if b.get("status") == "error":
         sys.exit(f"cleanup failed: {b.get('error')}")

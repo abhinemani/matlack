@@ -177,9 +177,8 @@ and reassign or split it by hand.
 
        python transcribe.py clean budget-kickoff --undo
 
-   puts the whole transcript back to what the transcriber recorded. This is
-   the one pass that uses Claude Fable 5.1 rather than Opus (`CLEANUP_MODEL`
-   overrides it, `CLEANUP=0` skips the pass). Two mechanical guards sit
+   puts the whole transcript back to what the transcriber recorded.
+   `CLEANUP=0` in `.env` skips the pass. Two mechanical guards sit
    between the model and the transcript: a tidied line may not use a word
    the original did not have, and may not lose half its length. A line
    failing either is kept exactly as recorded and reported.
@@ -275,7 +274,7 @@ viewer's source is in `site/`; it is copied in on every publish.
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`
 (the Claude name-guessing pass), `summarize.py` (the Claude summary pass,
-driven by `guides/`), `cleanup.py` (the Fable 5.1 text-tidying pass),
+driven by `guides/`), `cleanup.py` (the text-tidying pass),
 `spellings.py` (`spellings.txt`, names to always spell one way), `store.py`
 (meeting.json read/write and speaker edits),
 `export.py`, `publish.py` (the encrypted static site and its git push), and

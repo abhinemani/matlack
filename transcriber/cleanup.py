@@ -19,6 +19,10 @@ the content" is not something a prompt can guarantee:
     (catches invention),
   - it may not fall below half the original length (catches summarising).
 A line failing either is left exactly as it was and counted as refused.
+
+Runs on the same model as every other pass (Opus unless CLAUDE_MODEL says
+otherwise). CLEANUP_EFFORT tunes how hard it thinks about a batch;
+CLEANUP=0 skips the pass entirely.
 """
 from __future__ import annotations
 
@@ -28,7 +32,6 @@ import time
 
 from . import naming, store
 
-MODEL = os.environ.get("CLEANUP_MODEL") or "claude-fable-5-1"
 EFFORT = os.environ.get("CLEANUP_EFFORT") or "medium"
 BATCH = int(os.environ.get("CLEANUP_BATCH", "80"))
 
@@ -143,7 +146,7 @@ def run(mid: str) -> dict:
         raise RuntimeError(f"{mid} has no transcript yet")
     import anthropic
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    model = os.environ.get("CLEANUP_MODEL") or MODEL
+    model = store.model_id(m)          # Opus, like every other pass
 
     # Always clean from the verbatim text, so re-running can't compound.
     source = [(i, u.get("raw") or u.get("text") or "")
