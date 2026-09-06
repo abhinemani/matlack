@@ -39,7 +39,8 @@ def process_meeting(mid: str) -> dict:
         tid = aai.submit(url, speech_model=os.environ.get("AAI_SPEECH_MODEL") or None,
                          language_code=os.environ.get("AAI_LANGUAGE") or None,
                          speakers_expected=m.get("speakers_expected"),
-                         keyterms=store.people_names(m.get("people")))
+                         keyterms=store.people_names(m.get("people")),
+                         advanced_diarization=os.environ.get("AAI_ADVANCED_DIARIZATION") == "1")
         store.set_status(mid, "transcribing", aai_id=tid)
         log(f"[{mid}] transcribing ({tid})")
         t = aai.wait(tid)

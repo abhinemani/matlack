@@ -107,6 +107,10 @@ and reassign or split it by hand.
 2. AssemblyAI transcribes and separates the voices. It gets the head count
    as an exact speaker count and the names as spelling hints, a nudge
    toward "Alicia" over "Lucia" when the audio is close, not a rule.
+   `AAI_ADVANCED_DIARIZATION=1` in `.env` switches on AssemblyAI's
+   experimental diarization, which is meant for many speakers or rough
+   audio and costs a few cents more per hour; it helps most when people
+   introduce themselves in quick succession.
 3. Claude reads the transcript and works out who each voice is, citing the
    lines that support each guess and flagging lines that look like two
    people run together.

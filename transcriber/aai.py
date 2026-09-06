@@ -39,7 +39,7 @@ def upload(path: Path, chunk_size: int = 5 * 1024 * 1024) -> str:
 
 def submit(audio_url: str, speech_model: str | None = None,
            language_code: str | None = None, speakers_expected: int | None = None,
-           keyterms: list[str] | None = None) -> str:
+           keyterms: list[str] | None = None, advanced_diarization: bool = False) -> str:
     body = {
         "audio_url": audio_url,
         "speaker_labels": True,
@@ -52,7 +52,16 @@ def submit(audio_url: str, speech_model: str | None = None,
         terms = [" ".join(t.split()) for t in keyterms if t and len(t.split()) <= 6]
         if terms:
             body["keyterms_prompt"] = list(dict.fromkeys(terms))[:200]
-    if speakers_expected:
+    if advanced_diarization:
+        # AssemblyAI's experimental diarization (priced separately), meant for
+        # many speakers or difficult audio. It lives in speaker_options, which
+        # can't be combined with the plain speakers_expected field, so an
+        # exact count becomes equal hard limits there.
+        body["speaker_options"] = {"advanced_speaker_segmentation": True}
+        if speakers_expected:
+            body["speaker_options"].update(min_speakers_expected=int(speakers_expected),
+                                           max_speakers_expected=int(speakers_expected))
+    elif speakers_expected:
         # Exact count from the user; diarization then neither merges two
         # voices into one label nor splits one voice into two.
         body["speakers_expected"] = int(speakers_expected)
@@ -62,7 +71,8 @@ def submit(audio_url: str, speech_model: str | None = None,
         body["language_code"] = language_code
     with httpx.Client(timeout=60.0) as c:
         r = c.post(f"{BASE}/transcript", headers=_headers(), json=body)
-        r.raise_for_status()
+        if r.status_code >= 400:
+            raise RuntimeError(f"AssemblyAI rejected the request ({r.status_code}): {r.text[:300]}")
         return r.json()["id"]
 
 
