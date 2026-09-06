@@ -31,7 +31,7 @@
 <header class="top">
   <div>
     <div class="h1-row"><h1>Meetings</h1>{% if meetings %}<span class="count">{{ meetings|length }}</span>{% endif %}</div>
-    <p class="lede">Drop recordings here or in the inbox folder. Each one comes back with speakers guessed from what was said, ready for you to confirm.</p>
+    <p class="lede">Drop a recording here. It comes back as a transcript with speaker names for you to check.</p>
   </div>
 </header>
 
@@ -42,18 +42,18 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="#9a5b12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
       </div>
       <p>Drag audio files onto this box, or choose them.
-        <small>m4a, mp3, wav, mp4. Several at once is fine; they run in parallel.</small></p>
+        <small>m4a, mp3, wav, mp4. Several at once is fine.</small></p>
     </div>
     <div class="who-row">
       <label class="who-field">
         <span>Who was there? <em>Optional</em></span>
         <input type="text" name="people" id="people" placeholder="Names you already know, comma-separated. Roles in parentheses." autocomplete="off">
-        <small>Fill this in first if you like; it goes along with the files you add next. Partial is fine, Claude still works out who's who.</small>
+        <small>Fill in before choosing files. Partial is fine; roles in parentheses.</small>
       </label>
       <label class="who-field count-field">
         <span>How many spoke? <em>Optional</em></span>
         <input type="number" name="speakers_expected" id="speakers_expected" min="1" max="26" placeholder="e.g. 4" autocomplete="off">
-        <small>If you're sure, the diarizer keeps exactly that many voices apart.</small>
+        <small>If you know it. Helps keep voices apart.</small>
       </label>
     </div>
     <div>
@@ -73,7 +73,7 @@
     <div class="ask-head">
       <span class="ask-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg></span>
       <div><h2>New recording: {{ m.title }}</h2>
-        <p>Before it goes off for transcription: who was there, and how many people spoke? Both optional, both help. Names can be partial; roles in parentheses.</p></div>
+        <p>Who was there, and how many spoke? Both optional. Partial names are fine; roles in parentheses.</p></div>
     </div>
     <div class="ask-fields">
       <label class="who-field"><span>Who was there?</span>

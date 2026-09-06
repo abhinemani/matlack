@@ -32,8 +32,6 @@
 .key .sp .who.unconfirmed { color: var(--warn); }
 .key .fine { padding: 0 0 6px; }
 
-.brand-bar .nav button.lock { border: 0; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 500; padding: 5px 10px; border-radius: 7px; }
-.brand-bar .nav button.lock:hover { color: var(--ink); background: var(--page); }
-.brand-bar .nav button.lock svg { width: 13px; height: 13px; }
 
 .published-note { color: var(--faint); font-size: 12.5px; margin-top: 28px; }
+.published-note a { color: var(--muted); }

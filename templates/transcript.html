@@ -59,8 +59,8 @@
   {% if m.error %}<div class="err">{{ m.error }}</div>{% endif %}
   {% if m.status == "waiting" %}
     <section class="people-card">
-      <h2>Before this goes off for transcription</h2>
-      <p class="hint">Who was there, and how many people spoke? Both optional, both help. Names can be partial; roles in parentheses.</p>
+      <h2>Before transcribing</h2>
+      <p class="hint">Who was there, and how many spoke? Both optional. Partial names are fine; roles in parentheses.</p>
       <div class="ask-fields">
         <label class="who-field"><span>Who was there?</span>
           <input type="text" id="people" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off"></label>
@@ -88,7 +88,7 @@
     </div>
     <section class="people-card">
       <h2>Who was there?</h2>
-      <p class="hint">While you wait: any names you already know help the speaker guesses. Optional, partial is fine, roles in parentheses.</p>
+      <p class="hint">Names you know help. Optional; roles in parentheses.</p>
       <input type="text" id="people" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off" onchange="savePeople(this.value)">
     </section>
     <script>
@@ -111,7 +111,7 @@
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </summary>
       <div class="key-body">
-        <p class="hint">Amber names are guesses from the conversation. Edit or accept them; changes apply to every line at once. Someone missing? Pick “Someone else…” on any line, or add a speaker below.</p>
+        <p class="hint">Names in amber are guesses. Edit or accept them. Missing someone? Pick “Someone else…” on a line, or add a speaker below.</p>
         <div id="speakers"></div>
         <div id="mergedNote"></div>
         <div id="repairs"></div>
@@ -120,8 +120,8 @@
           <input type="text" id="people" placeholder="Names, comma-separated. Roles in parentheses." autocomplete="off" onchange="savePeople(this.value)">
           <div class="row">
             {% if m.status == 'ready' %}<button class="small" id="guessBtn" onclick="guessAgain()" title="Run the name guesses again with these people as context. Confirmed names are kept."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Guess again</button>
-            <span class="fine">Optional and partial. Claude still works out who's who.</span>
-            {% else %}<span class="fine">Optional and partial. Used when the transcript is retried.</span>{% endif %}
+            <span class="fine">Optional.</span>
+            {% else %}<span class="fine">Optional. Used if the transcript is redone.</span>{% endif %}
           </div>
         </div>
       </div>
@@ -147,11 +147,11 @@
   {% if has_audio %}
   <div class="player">
     <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></svg></span>
-    <div class="meta-col"><b>{{ m.title }}</b><span>Click a timestamp to jump</span></div>
+    <div class="meta-col"><b>{{ m.title }}</b><span>Click a timestamp to play from there</span></div>
     <audio controls preload="none" src="/t/{{ m.id }}/audio" id="audio"></audio>
   </div>
   {% else %}
-  <p class="fine no-audio">The recording for this meeting has been deleted. The transcript and summary are kept; playback is off.</p>
+  <p class="fine no-audio">The recording was deleted, so there's no playback. The transcript and summary are unaffected.</p>
   {% endif %}
   {% endif %}
 </main>
@@ -330,9 +330,9 @@ function renderMerged() {
   const lines = ((meeting.naming || {}).merged_lines || []).filter(x => Number.isInteger(x.line) && meeting.utterances[x.line])
     .sort((a, b) => a.line - b.line);
   if (!lines.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="merged"><b>Possibly two people in one line:</b> ${lines.map(x =>
+  box.innerHTML = `<div class="merged"><b>Lines that may hold two speakers:</b> ${lines.map(x =>
     `<a href="#" onclick="jumpTo(${x.line});return false" title="${esc(x.note || '')}">${fmt(meeting.utterances[x.line].start)}</a>`).join(', ')}.
-    <span class="fine">Diarization ran two turns together there; check who is speaking.</span></div>`;
+    <span class="fine">Check who is talking.</span></div>`;
 }
 function jumpTo(i) {
   const row = document.querySelector(`.u[data-i="${i}"]`); if (!row) return;
@@ -372,7 +372,7 @@ function renderRepairs() {
       <span class="spacer"></span>
       ${open.length > 1 ? `<button class="small" onclick="applyAllRepairs()">Apply all</button>` : ''}
       <button class="small" id="reviewBtn" onclick="reviewAgain()" ${busy ? 'disabled' : ''} title="Read the transcript again and propose a fresh list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Review again</button></div>
-    ${rows || `<p class="fine">${meeting.repairs ? (done ? `Nothing left; ${done} applied.` : 'The review pass found nothing to fix.') : 'Not reviewed yet.'}</p>`}
+    ${rows || `<p class="fine">${meeting.repairs ? (done ? `Nothing left; ${done} applied.` : 'No fixes suggested.') : 'Not reviewed yet.'}</p>`}
   </div>`;
 }
 function takeRepairs(r) {
