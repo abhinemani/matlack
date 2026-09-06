@@ -17,7 +17,9 @@ Two guards sit between the model and the transcript, because "do not change
 the content" is not something a prompt can guarantee:
   - a cleaned line may not introduce a content word the original did not have
     (catches invention),
-  - it may not fall below half the original length (catches summarising).
+  - it may not fall below half the original length (catches summarising),
+  - it may not flatten a word the speaker repeated three or more times, which
+    is emphasis rather than a stumble.
 A line failing either is left exactly as it was and counted as refused.
 
 Runs on the same model as every other pass (Opus unless CLAUDE_MODEL says
@@ -44,7 +46,9 @@ Fix only these:
 - stutters and false starts where the speaker immediately restarts the same
   thought: "I— I think we should" -> "I think we should"; "the the budget"
   -> "the budget"
-- a word or short phrase repeated by accident: "we we need" -> "we need"
+- a word repeated by accident, and only a doubling: "we we need" -> "we need".
+  Three or more in a row is emphasis and stays exactly as it is: "a good,
+  good, good change" keeps all three goods.
 - missing or wrong sentence punctuation and capitalisation
 - a stray dash or ellipsis left by a cut-off that the speaker then completed
 - spacing and obvious typography
@@ -59,6 +63,14 @@ Never do any of these:
 - add a word that is not already in the line, or introduce a fact
 - drop a hesitation that carries meaning: a "well..." before a difficult
   answer, or a genuine trailing off mid-thought, is content
+- drop an aside the speaker slipped in, even when it sits inside a false
+  start you are otherwise right to remove. In "We had the one-time, which I
+  found out, we had the one-time cost for the cubicles", the abandoned "We
+  had the one-time," goes and "which I found out," stays, because it tells
+  the reader something. An aside is content however small, however awkwardly
+  placed, and however much tidier the line reads without it.
+- flatten emphasis. Repetition, "really really", a doubled "no, no" -- if a
+  speaker leaned on something, the reader should be able to tell
 - merge lines, split lines, or move text between lines
 - translate or change the language
 
@@ -89,6 +101,24 @@ def _content_words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9']{4,}", text.lower()) if w not in _FILLER}
 
 
+def _emphatic(text: str) -> dict[str, int]:
+    """Words the speaker said three or more times in a row. A doubling is a
+    stumble and may be tidied away; going back a third time is someone
+    leaning on a word, and the reader should be able to hear it."""
+    runs: dict[str, int] = {}
+    words = re.findall(r"[a-z']+", text.lower())
+    i = 0
+    while i < len(words):
+        j = i
+        while j + 1 < len(words) and words[j + 1] == words[i]:
+            j += 1
+        n = j - i + 1
+        if n >= 3:
+            runs[words[i]] = max(runs.get(words[i], 0), n)
+        i = j + 1
+    return runs
+
+
 def check(original: str, cleaned: str) -> str | None:
     """Why this cleaned line must be refused, or None if it is safe."""
     cleaned = cleaned.strip()
@@ -99,6 +129,10 @@ def check(original: str, cleaned: str) -> str | None:
         return "introduced " + ", ".join(sorted(invented)[:3])
     if len(cleaned) < len(original.strip()) * 0.55:
         return "dropped too much text"
+    after = _emphatic(cleaned)
+    for word, n in _emphatic(original).items():
+        if after.get(word, 0) < n:
+            return f"flattened the repeated “{word}”"
     return None
 
 
