@@ -38,13 +38,17 @@ def upload(path: Path, chunk_size: int = 5 * 1024 * 1024) -> str:
 
 
 def submit(audio_url: str, speech_model: str | None = None,
-           language_code: str | None = None) -> str:
+           language_code: str | None = None, speakers_expected: int | None = None) -> str:
     body = {
         "audio_url": audio_url,
         "speaker_labels": True,
         "punctuate": True,
         "format_text": True,
     }
+    if speakers_expected:
+        # Exact count from the user; diarization then neither merges two
+        # voices into one label nor splits one voice into two.
+        body["speakers_expected"] = int(speakers_expected)
     if speech_model:
         body["speech_model"] = speech_model
     if language_code:

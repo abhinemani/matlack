@@ -45,7 +45,8 @@ def _meeting_or_404(mid: str) -> dict:
 
 def _public(m: dict) -> dict:
     return {k: m[k] for k in ("id", "title", "status", "error", "created", "updated",
-                              "duration_ms", "speakers", "people", "public") if k in m} | {
+                              "duration_ms", "speakers", "people", "speakers_expected",
+                              "public") if k in m} | {
         "n_utterances": len(m.get("utterances", [])),
         "summary_status": (m.get("summary") or {}).get("status"),
         "pub_state": publish.state(m)}
@@ -71,8 +72,10 @@ def start_watcher() -> None:
     if _watch_thread:
         return
     stop = threading.Event()
+    # hold=True: files that land in the inbox wait on the Meetings page for
+    # "who was there / how many spoke" before anything is sent off.
     _watch_thread = threading.Thread(
-        target=pipeline.watch, kwargs={"workers": WORKERS, "stop": stop}, daemon=True)
+        target=pipeline.watch, kwargs={"workers": WORKERS, "stop": stop, "hold": True}, daemon=True)
     _watch_thread.start()
 
 
@@ -121,8 +124,10 @@ def summary_page(request: Request, mid: str):
 
 # --- api ---------------------------------------------------------------------
 @app.post("/upload")
-async def upload(files: list[UploadFile] = File(...), people: str = Form("")):
+async def upload(files: list[UploadFile] = File(...), people: str = Form(""),
+                 speakers_expected: str = Form("")):
     store.ensure_dirs()
+    count = store._count(speakers_expected)
     names = store.parse_people(people)
     ids = []
     for f in files:
@@ -135,6 +140,8 @@ async def upload(files: list[UploadFile] = File(...), people: str = Form("")):
         final = store.INBOX_DIR / f.filename
         tmp.replace(final)
         m = pipeline.ingest_file(final, people=names)
+        if count:
+            store.set_details(m["id"], speakers_expected=count)
         ids.append(m["id"])
         _executor.submit(pipeline.process_meeting, m["id"])
     return RedirectResponse("/", status_code=303)
@@ -182,10 +189,26 @@ def api_delete(mid: str):
 
 @app.post("/api/meetings/{mid}/scan")
 def api_scan(mid: str = "inbox"):
-    created = pipeline.scan_inbox()
-    for m in created:
-        _executor.submit(pipeline.process_meeting, m["id"])
-    return {"queued": [m["id"] for m in created]}
+    """Register inbox files as waiting; the page then asks who was there."""
+    created = pipeline.scan_inbox(hold=True)
+    return {"waiting": [m["id"] for m in created]}
+
+
+@app.post("/api/meetings/{mid}/details")
+async def api_details(mid: str, request: Request):
+    """What the user knows up front: names (partial is fine) and how many
+    people spoke. With start=true a waiting meeting begins transcribing; the
+    count goes to the diarizer, the names to the naming pass."""
+    m = _meeting_or_404(mid)
+    body = await request.json()
+    m = store.set_details(mid, body.get("people"), body.get("speakers_expected"))
+    started = False
+    if body.get("start") and m["status"] == "waiting":
+        store.set_status(mid, "queued")
+        _executor.submit(pipeline.process_meeting, mid)
+        started = True
+    return {"people": m["people"], "speakers_expected": m.get("speakers_expected"),
+            "started": started}
 
 
 @app.post("/api/meetings/{mid}/public")

@@ -24,12 +24,15 @@ Drop recordings in `data/inbox/`, then:
 
     python transcribe.py run
 
-In a terminal it first asks who was in each new meeting. Answer with any
-names you already know (partial is fine, roles in parentheses) or press
-Enter to skip; `run -y` skips the question. Claude still works out who is
-who from the conversation, it just starts with better context. The same
-names can be given up front with `add <file> --people "Vera Zubo" "Mark"`,
-typed into the upload box on the web page, or added later:
+In a terminal it first asks two things about each new meeting: who was
+there, and how many people spoke. Answer with any names you already know
+(partial is fine, roles in parentheses) and a head count if you are sure of
+it, or press Enter to skip either; `run -y` skips both. The names give the
+speaker guesses something to go on; the count is passed to the diarizer so
+it keeps exactly that many voices apart, which matters most when people
+introduce themselves in quick succession. The same details can be given up
+front with `add <file> --people "Vera Zubo" "Mark" --speakers 4`, typed
+into the upload box on the web page, or added later:
 
     python transcribe.py people budget-kickoff "Vera Zubo (budget director)" "Mark"
 
@@ -81,9 +84,22 @@ When a transcript is messy enough that command-line fixes get tedious:
 
 Upload files by dragging them onto the page, then open a meeting: rename or
 accept speakers on the left, change any single line's speaker with the
-dropdown on the right, click a timestamp to hear that moment, click text to
-fix a transcription error. Every change saves immediately to the same
-`meeting.json` the CLI uses, so you can move between the two freely.
+dropdown on the right (pick "Someone else…" there to add a person the first
+pass never separated out), click a timestamp to hear that moment, click
+text to fix a transcription error. Every change saves immediately to the
+same `meeting.json` the CLI uses, so you can move between the two freely.
+
+Recordings that land in the inbox folder while the page is open (or when
+you click "check the inbox") don't start on their own: a card appears at
+the top of the Meetings page asking who was there and how many people
+spoke, and the meeting waits until you press Start. That is the moment the
+answers are most useful, since the head count has to reach the diarizer
+before transcription begins. `python transcribe.py run` picks up waiting
+meetings too, asking the same questions in the terminal.
+
+The speaker panel also lists lines where the naming pass thinks two
+people's turns were run together by the diarizer; click one to jump there
+and reassign or split it by hand.
 
 ## Publishing a read-only site
 
@@ -163,5 +179,7 @@ gets published.
 `serve.py`, `templates/` and `static/` leaves a working CLI tool.
 
 Costs: AssemblyAI bills per audio hour; each Claude pass sends the transcript
-text once per meeting (summaries use Claude Opus by default; set
-`SUMMARY_MODEL` in `.env` to change that). Check both providers' current pricing pages.
+text once per meeting. Both the name-guessing pass and the summaries use
+Claude Opus by default (set `CLAUDE_MODEL` or `SUMMARY_MODEL` in `.env` to
+change that); naming an hour-long meeting costs on the order of ten cents.
+Check both providers' current pricing pages.

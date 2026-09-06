@@ -15,7 +15,10 @@ transcripts. Read this before doing anything.
 
 ## Common requests and the right command
 - "Transcribe the new files" → `python transcribe.py run`
-  (in a terminal it asks who was in each new meeting; `-y` skips the question)
+  (in a terminal it asks who was in each new meeting and how many spoke;
+  `-y` skips; `add <file> --people ... --speakers N` gives both up front.
+  Files the web page found in the inbox sit as `waiting` until someone
+  answers on the Meetings page or `run` asks in the terminal)
 - "Vera and Mark were in that meeting" → `python transcribe.py people <id> "Vera Zubo" "Mark (interviewer)"`
   (optional, partial list; stored under `people` and used by the name guesses;
   on a finished transcript it guesses again, keeping confirmed names)

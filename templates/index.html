@@ -44,11 +44,18 @@
       <p>Drag audio files onto this box, or choose them.
         <small>m4a, mp3, wav, mp4. Several at once is fine; they run in parallel.</small></p>
     </div>
-    <label class="who-field">
-      <span>Who was there? <em>Optional</em></span>
-      <input type="text" name="people" id="people" placeholder="Names you already know, comma-separated. Roles in parentheses." autocomplete="off">
-      <small>Fill this in first if you like; it goes along with the files you add next. Partial is fine, Claude still works out who's who.</small>
-    </label>
+    <div class="who-row">
+      <label class="who-field">
+        <span>Who was there? <em>Optional</em></span>
+        <input type="text" name="people" id="people" placeholder="Names you already know, comma-separated. Roles in parentheses." autocomplete="off">
+        <small>Fill this in first if you like; it goes along with the files you add next. Partial is fine, Claude still works out who's who.</small>
+      </label>
+      <label class="who-field count-field">
+        <span>How many spoke? <em>Optional</em></span>
+        <input type="number" name="speakers_expected" id="speakers_expected" min="1" max="26" placeholder="e.g. 4" autocomplete="off">
+        <small>If you're sure, the diarizer keeps exactly that many voices apart.</small>
+      </label>
+    </div>
     <div>
       <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
       <button type="button" class="primary" onclick="document.getElementById('files').click()">
@@ -59,6 +66,28 @@
     {% if watching %}Watching <code>{{ inbox }}</code> — files that appear there are picked up automatically.
     {% else %}Files placed in <code>{{ inbox }}</code> are picked up when you <button class="link" onclick="scan()">check the inbox</button> or run <code>python transcribe.py run</code>.{% endif %}
   </p>
+
+  {% set waiting = meetings|selectattr('status', 'equalto', 'waiting')|list %}
+  {% for m in waiting %}
+  <section class="ask-card" data-id="{{ m.id }}">
+    <div class="ask-head">
+      <span class="ask-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg></span>
+      <div><h2>New recording: {{ m.title }}</h2>
+        <p>Before it goes off for transcription: who was there, and how many people spoke? Both optional, both help. Names can be partial; roles in parentheses.</p></div>
+    </div>
+    <div class="ask-fields">
+      <label class="who-field"><span>Who was there?</span>
+        <input type="text" id="ask-people-{{ m.id }}" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off"></label>
+      <label class="who-field count-field"><span>How many spoke?</span>
+        <input type="number" id="ask-count-{{ m.id }}" min="1" max="26" value="{{ m.speakers_expected or '' }}" placeholder="e.g. 4" autocomplete="off"></label>
+    </div>
+    <div class="ask-actions">
+      <button class="primary" onclick="startMeeting('{{ m.id }}', true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Start transcribing</button>
+      <button onclick="startMeeting('{{ m.id }}', false)">Start without details</button>
+      <button class="quiet danger" onclick="remove('{{ m.id }}', '{{ m.title|e }}')">Delete</button>
+    </div>
+  </section>
+  {% endfor %}
 
   {% if meetings %}
   <div class="list-head">
@@ -121,6 +150,16 @@ async function remove(id, title) {
   await fetch(`/api/meetings/${id}`, {method:'DELETE'}); location.reload();
 }
 async function scan() { await fetch('/api/meetings/inbox/scan', {method:'POST'}); location.reload(); }
+async function startMeeting(id, withDetails) {
+  const body = {start: true};
+  if (withDetails) {
+    body.people = document.getElementById('ask-people-' + id).value;
+    body.speakers_expected = document.getElementById('ask-count-' + id).value;
+  }
+  const r = await fetch(`/api/meetings/${id}/details`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  if (!r.ok) { alert('That didn\'t start: ' + (await r.text())); return; }
+  location.reload();
+}
 async function doPublish() {
   const btn = document.getElementById('pubBtn'), label = btn.querySelector('span');
   btn.disabled = true; label.textContent = 'Publishing…';
@@ -147,9 +186,15 @@ document.querySelectorAll('.when[data-created]').forEach(el => {
   if (ts) el.textContent = 'Added ' + timeAgo(ts);
 });
 
-// While anything is in progress, refresh the list quietly.
-const busy = [...document.querySelectorAll('.status')].some(s => !/ready|error/.test(s.className));
-if (busy) setTimeout(() => location.reload(), 8000);
+// While anything is in progress, refresh the list quietly; while the inbox is
+// watched, refresh too so new recordings show up and ask their question.
+// Never yank the page away from someone who is typing.
+const busy = [...document.querySelectorAll('.status')].some(s => !/ready|error|waiting/.test(s.className));
+const watching = {{ watching|tojson }};
+if (busy || watching) setTimeout(function tick() {
+  const typing = document.activeElement && document.activeElement.matches('input, textarea');
+  if (typing) setTimeout(tick, 4000); else location.reload();
+}, busy ? 8000 : 15000);
 </script>
 </body>
 </html>

@@ -106,7 +106,8 @@ def parse_people(text: str | list | None) -> list[str]:
     return out
 
 
-def create_from_file(src: Path, move: bool = True, people: list[str] | None = None) -> dict:
+def create_from_file(src: Path, move: bool = True, people: list[str] | None = None,
+                     hold: bool = False, speakers_expected: int | None = None) -> dict:
     """Register an audio file as a new meeting. Moves (or copies) the audio
     into the meeting folder so the inbox stays clean. `people` is an optional,
     partial list of names the user already knows were there."""
@@ -124,7 +125,7 @@ def create_from_file(src: Path, move: bool = True, people: list[str] | None = No
         "id": mid,
         "title": src.stem,
         "audio": dest.name,
-        "status": "queued",
+        "status": "waiting" if hold else "queued",
         "error": None,
         "aai_id": None,
         "created": time.time(),
@@ -133,6 +134,7 @@ def create_from_file(src: Path, move: bool = True, people: list[str] | None = No
         "utterances": [],
         "speakers": {},
         "people": parse_people(people),
+        "speakers_expected": _count(speakers_expected),
         "log": [],
     }
     return save(meeting)
@@ -141,6 +143,26 @@ def create_from_file(src: Path, move: bool = True, people: list[str] | None = No
 def set_people(mid: str, people: str | list | None) -> dict:
     m = load(mid)
     m["people"] = parse_people(people)
+    return save(m)
+
+
+def _count(n) -> int | None:
+    """A speaker count typed by the user: a positive integer or nothing."""
+    try:
+        n = int(str(n).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if 1 <= n <= 26 else None
+
+
+def set_details(mid: str, people: str | list | None = None,
+                speakers_expected=None) -> dict:
+    """What the user knows before transcription: names (partial is fine) and
+    how many people spoke. Either can be left out."""
+    m = load(mid)
+    if people is not None:
+        m["people"] = parse_people(people)
+    m["speakers_expected"] = _count(speakers_expected)
     return save(m)
 
 

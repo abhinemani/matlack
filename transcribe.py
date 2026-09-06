@@ -40,20 +40,30 @@ def _interactive(a) -> bool:
 
 
 def ask_people(mid: str) -> list[str]:
-    """Optional, partial: a few names the user already knows were in the room.
-    Claude still does the identifying; this just gives it something to go on."""
+    """Optional, partial: a few names the user already knows were in the room,
+    and how many people spoke. Claude still does the identifying; the names
+    give it something to go on and the count keeps the diarizer honest."""
     m = store.load(mid)
-    if m.get("people"):
-        return m["people"]
+    if m.get("people") or m.get("speakers_expected"):
+        return m.get("people") or []
     try:
         raw = input(f"Who was in “{m['title']}”? Names you know, comma-separated, "
                     f"roles in parentheses (Enter to skip): ")
+        count = input("How many people spoke? (Enter if unsure): ")
     except EOFError:
         return []
     people = store.parse_people(raw)
-    if people:
-        store.set_people(mid, people)
+    if people or store._count(count):
+        store.set_details(mid, people, count)
     return people
+
+
+def _release_waiting(ids: list[str]) -> None:
+    """Meetings the web page parked while waiting for names: the CLI has asked
+    (or been told not to), so they can go."""
+    for mid in ids:
+        if store.load(mid)["status"] == "waiting":
+            store.set_status(mid, "queued")
 
 
 def cmd_run(a):
@@ -63,11 +73,12 @@ def cmd_run(a):
         pipeline.watch(inbox, workers=a.workers, interval=a.interval)
         return
     created = pipeline.scan_inbox(inbox)
-    if created and _interactive(a):
-        print("A few known names help the speaker guesses. Optional; partial is fine.")
-        for m in created:
-            ask_people(m["id"])
-    pending = pipeline.pending_ids()
+    pending = pipeline.pending_ids(include_waiting=True)
+    if pending and _interactive(a):
+        print("A few known names and a head count help the speaker guesses. Optional; partial is fine.")
+        for mid in pending:
+            ask_people(mid)
+    _release_waiting(pending)
     if not pending:
         print("Nothing to do. Drop .m4a/.mp3 files in", inbox)
         return
@@ -82,8 +93,10 @@ def cmd_add(a):
     people = store.parse_people(a.people)
     for f in a.files:
         m = pipeline.ingest_file(Path(f), move=not a.copy, people=people)
+        if a.speakers:
+            store.set_details(m["id"], speakers_expected=a.speakers)
         print("queued", m["id"])
-        if not people and _interactive(a):
+        if not people and not a.speakers and _interactive(a):
             ask_people(m["id"])
     if not a.no_run:
         pipeline.run_batch(workers=a.workers)
@@ -278,6 +291,7 @@ def main(argv=None):
     s.add_argument("--no-run", action="store_true")
     s.add_argument("--workers", type=int, default=3)
     s.add_argument("--people", nargs="+", metavar="NAME", help="names you know were there (partial is fine)")
+    s.add_argument("--speakers", type=int, metavar="N", help="how many people spoke, if you know")
     s.add_argument("-y", "--yes", action="store_true", help="don't ask who was in each meeting")
     s.set_defaults(fn=cmd_add)
 

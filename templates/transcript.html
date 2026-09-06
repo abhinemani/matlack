@@ -57,7 +57,31 @@
 
 <main class="wrap">
   {% if m.error %}<div class="err">{{ m.error }}</div>{% endif %}
-  {% if m.status != "ready" and not m.error %}
+  {% if m.status == "waiting" %}
+    <section class="people-card">
+      <h2>Before this goes off for transcription</h2>
+      <p class="hint">Who was there, and how many people spoke? Both optional, both help. Names can be partial; roles in parentheses.</p>
+      <div class="ask-fields">
+        <label class="who-field"><span>Who was there?</span>
+          <input type="text" id="people" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off"></label>
+        <label class="who-field count-field"><span>How many spoke?</span>
+          <input type="number" id="count" min="1" max="26" value="{{ m.speakers_expected or '' }}" placeholder="e.g. 4" autocomplete="off"></label>
+      </div>
+      <div class="ask-actions">
+        <button class="primary" onclick="startMeeting(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Start transcribing</button>
+        <button onclick="startMeeting(false)">Start without details</button>
+      </div>
+    </section>
+    <script>
+      async function startMeeting(withDetails) {
+        const body = {start: true};
+        if (withDetails) { body.people = document.getElementById('people').value; body.speakers_expected = document.getElementById('count').value; }
+        const r = await fetch(`/api/meetings/{{ m.id }}/details`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+        if (!r.ok) { alert('That didn\'t start: ' + (await r.text())); return; }
+        location.reload();
+      }
+    </script>
+  {% elif m.status != "ready" and not m.error %}
     <div class="pending">
       <span class="status {{ m.status }}">{{ m.status }}</span>
       <p>Still working on this recording. The page refreshes on its own.</p>
@@ -87,8 +111,9 @@
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </summary>
       <div class="key-body">
-        <p class="hint">Amber names are guesses from the conversation. Edit or accept them; changes apply to every line at once.</p>
+        <p class="hint">Amber names are guesses from the conversation. Edit or accept them; changes apply to every line at once. Someone missing? Pick “Someone else…” on any line, or add a speaker below.</p>
         <div id="speakers"></div>
+        <div id="mergedNote"></div>
         <div class="people">
           <div class="label">People you know were there</div>
           <input type="text" id="people" placeholder="Names, comma-separated. Roles in parentheses." autocomplete="off" onchange="savePeople(this.value)">
@@ -282,7 +307,8 @@ function renderStream() {
     const same = u.speaker === prev && !q; prev = u.speaker;
     const hit = !q || u.text.toLowerCase().includes(q) || nameOf(u.speaker).toLowerCase().includes(q);
     if (hit) shown++;
-    const opts = labels.map(l => `<option value="${l}" ${l === u.speaker ? 'selected' : ''}>${esc(nameOf(l))}</option>`).join('');
+    const opts = labels.map(l => `<option value="${l}" ${l === u.speaker ? 'selected' : ''}>${esc(nameOf(l))}</option>`).join('')
+      + '<option disabled>────────</option><option value="__new">Someone else… (new speaker)</option>';
     return `<div class="u ${same ? 'same' : ''} ${hit ? '' : 'hide'}" style="--c:${color(u.speaker)}" data-i="${i}" data-start="${u.start}" data-end="${u.end ?? ''}">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3.5-6 7-6s7 2.5 7 6"/></svg></div>
       <div class="t">${hasAudio ? `<a href="#" title="Play from here" onclick="seek(${u.start});return false">${fmt(u.start)}</a>` : fmt(u.start)}</div>
@@ -296,7 +322,23 @@ function renderStream() {
   document.getElementById('lineCount').textContent = q ? `${shown} of ${meeting.utterances.length}` : `${meeting.utterances.length} lines`;
   document.getElementById('hits').textContent = q ? `${shown}` : '';
 }
-function render() { renderKey(); renderStream(); }
+function renderMerged() {
+  // Lines the naming pass thought hold two people's turns (diarization ran
+  // them together). Worth a look: split or reassign by hand.
+  const box = document.getElementById('mergedNote'); if (!box) return;
+  const lines = ((meeting.naming || {}).merged_lines || []).filter(x => Number.isInteger(x.line) && meeting.utterances[x.line])
+    .sort((a, b) => a.line - b.line);
+  if (!lines.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="merged"><b>Possibly two people in one line:</b> ${lines.map(x =>
+    `<a href="#" onclick="jumpTo(${x.line});return false" title="${esc(x.note || '')}">${fmt(meeting.utterances[x.line].start)}</a>`).join(', ')}.
+    <span class="fine">Diarization ran two turns together there; check who is speaking.</span></div>`;
+}
+function jumpTo(i) {
+  const row = document.querySelector(`.u[data-i="${i}"]`); if (!row) return;
+  document.querySelectorAll('.u.target').forEach(r => r.classList.remove('target'));
+  row.classList.add('target'); row.scrollIntoView({block: 'center', behavior: 'smooth'});
+}
+function render() { renderKey(); renderMerged(); renderStream(); }
 document.getElementById('people').value = (meeting.people || []).join(', ');
 
 let findTimer;
@@ -320,6 +362,14 @@ async function merge(source, into) {
   render();
 }
 async function reassign(i, label) {
+  if (label === '__new') {
+    // A person the first pass never separated out: add them, then move this line.
+    const name = prompt('Name for the new speaker (you can leave it blank):');
+    if (name === null) { render(); return; }
+    const r = await api('/speakers', {name});
+    meeting.speakers = r.speakers; color(r.label);
+    label = r.label;
+  }
   meeting.utterances[i].speaker = label;
   meeting.speakers = (await api(`/utterances/${i}`, {speaker: label})).speakers;
   render();
