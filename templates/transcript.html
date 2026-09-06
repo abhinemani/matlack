@@ -30,7 +30,7 @@
     </div>
     <div class="meta">
       {% if m.duration_ms %}<span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b>{{ store.fmt_ts(m.duration_ms) }}</b></span>{% endif %}
-      <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><b>{{ m.utterances|length }}</b> lines</span>
+      <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><b id="lineTotal">{{ m.utterances|length }}</b> lines</span>
       <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg><b id="spCount">{{ m.speakers|length }}</b> speakers</span>
       <span class="status {{ m.status }}">{{ m.status }}</span>
     </div>
@@ -378,6 +378,7 @@ function renderRepairs() {
 function takeRepairs(r) {
   meeting.repairs = r.repairs; meeting.utterances = r.utterances; meeting.speakers = r.speakers; meeting.naming = r.naming;
   Object.keys(meeting.speakers).sort().forEach(color);
+  const total = document.getElementById('lineTotal'); if (total) total.textContent = meeting.utterances.length;
   flashSaved(); render();
 }
 async function actRepair(rid, action) {
