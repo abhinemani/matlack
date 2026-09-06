@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -84,9 +85,27 @@ def _startup():
     store.ensure_dirs()
     if watch_on_start:
         start_watcher()
-    # Resume anything interrupted by a restart.
+    # Resume anything a restart interrupted: transcriptions, and summaries or
+    # review passes that were marked running and never finished.
     for mid in pipeline.pending_ids():
         _executor.submit(pipeline.process_meeting, mid)
+    for m in store.list_meetings():
+        if m["status"] != "ready":
+            continue
+        s = m.get("summary") or {}
+        if s.get("status") == "running":
+            pipeline.log(f"[{m['id']}] summary was interrupted by a restart; starting it again")
+            _executor.submit(_summary_job, m["id"], s.get("guide"))
+        if (m.get("repairs") or {}).get("status") == "running":
+            pipeline.log(f"[{m['id']}] review pass was interrupted by a restart; starting it again")
+            _executor.submit(pipeline.suggest_repairs, m["id"])
+
+
+def _summary_job(mid: str, gid: str | None) -> None:
+    try:
+        summarize.run(mid, gid)
+    except Exception as e:
+        pipeline.log(f"[{mid}] summary failed: {e}")
 
 
 # --- pages -------------------------------------------------------------------
@@ -374,7 +393,10 @@ async def api_summarize(mid: str, request: Request):
     m = _meeting_or_404(mid)
     if m["status"] != "ready":
         raise HTTPException(400, "transcript is not ready")
-    if (m.get("summary") or {}).get("status") == "running":
+    s = m.get("summary") or {}
+    # A summary takes a minute or two. One marked running for much longer was
+    # lost (a restart, a crash), so let it be started again.
+    if s.get("status") == "running" and time.time() - (s.get("created") or 0) < 300:
         return {"ok": True, "status": "running"}
     body = await request.json() if int(request.headers.get("content-length") or 0) else {}
     gid = (body.get("guide") or "").strip() or None
@@ -382,13 +404,7 @@ async def api_summarize(mid: str, request: Request):
         summarize.load_guide(gid)
     except FileNotFoundError as e:
         raise HTTPException(400, str(e))
-
-    def job():
-        try:
-            summarize.run(mid, gid)
-        except Exception as e:
-            pipeline.log(f"[{mid}] summary failed: {e}")
-    _executor.submit(job)
+    _executor.submit(_summary_job, mid, gid)
     return {"ok": True, "status": "running"}
 
 

@@ -92,6 +92,8 @@ function renderRunning() {
     <span class="status naming">summarizing</span>
     <h2 class="start-h">Reading the transcript</h2>
     <p>Organizing answers under each question in “${esc(summary.guide_title || 'the guide')}”. This page updates on its own.</p>
+    ${summary.created && Date.now() / 1000 - summary.created > 300 ? `<p class="start-note">This has taken longer than usual, which happens if the app was restarted while it ran.</p>
+    <div class="start-row"><button class="primary" onclick="generate(true)">Start again</button></div>` : ''}
   </div>`;
 }
 
