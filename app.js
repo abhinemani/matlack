@@ -141,7 +141,7 @@ function meetingHeader(m, page) {
     ? `<a class="btn primary" href="#/m/${esc(m.id)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Transcript</a>`
     : has ? `<a class="btn primary" href="#/m/${esc(m.id)}/summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>View summary</a>` : '';
   return `<header class="top"><div>${crumb}<div class="title-row"><h1>${esc(m.title)}</h1></div><div class="meta">${meta}</div></div>
-    <div class="toolbar"><button class="btn" id="copyBtn" title="Copy as plain text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>${action}</div></header>`;
+    <div class="toolbar"><button class="btn" id="copyBtn" title="Copy as plain text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>${page === 'summary' ? `<button class="btn" onclick="window.print()" title="Print, or save as PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>Print</button>` : ''}${action}</div></header>`;
 }
 
 function transcriptText(m) {
