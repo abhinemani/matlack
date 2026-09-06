@@ -164,15 +164,8 @@ def _context(people: list[str] | None, known: dict[str, str] | None,
 
 
 def request_options(model: str, schema: dict | None = None) -> dict:
-    """Per-model request extras. Fable thinks by default and is the pick for
-    people who want the most careful answer, so it runs at top effort. A
-    schema makes the API guarantee well-formed JSON."""
-    cfg = {}
-    if "fable" in model:
-        cfg["effort"] = "max"
-    if schema:
-        cfg["format"] = {"type": "json_schema", "schema": schema}
-    return {"output_config": cfg} if cfg else {}
+    """Request extras: a schema makes the API guarantee well-formed JSON."""
+    return {"output_config": {"format": {"type": "json_schema", "schema": schema}}} if schema else {}
 
 
 def guess_names(utterances: list[dict], people: list[str] | None = None,

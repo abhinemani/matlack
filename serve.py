@@ -46,7 +46,7 @@ def _meeting_or_404(mid: str) -> dict:
 def _public(m: dict) -> dict:
     return {k: m[k] for k in ("id", "title", "status", "error", "created", "updated",
                               "duration_ms", "speakers", "people", "speakers_expected",
-                              "model", "public") if k in m} | {
+                              "public") if k in m} | {
         "n_utterances": len(m.get("utterances", [])),
         "summary_status": (m.get("summary") or {}).get("status"),
         "pub_state": publish.state(m)}
@@ -125,7 +125,7 @@ def summary_page(request: Request, mid: str):
 # --- api ---------------------------------------------------------------------
 @app.post("/upload")
 async def upload(files: list[UploadFile] = File(...), people: str = Form(""),
-                 speakers_expected: str = Form(""), model: str = Form("")):
+                 speakers_expected: str = Form("")):
     store.ensure_dirs()
     count = store._count(speakers_expected)
     names = store.parse_people(people)
@@ -140,8 +140,8 @@ async def upload(files: list[UploadFile] = File(...), people: str = Form(""),
         final = store.INBOX_DIR / f.filename
         tmp.replace(final)
         m = pipeline.ingest_file(final, people=names)
-        if count or store.model_key(model):
-            store.set_details(m["id"], speakers_expected=count, model=model)
+        if count:
+            store.set_details(m["id"], speakers_expected=count)
         ids.append(m["id"])
         _executor.submit(pipeline.process_meeting, m["id"])
     return RedirectResponse("/", status_code=303)
@@ -201,14 +201,14 @@ async def api_details(mid: str, request: Request):
     count goes to the diarizer, the names to the naming pass."""
     m = _meeting_or_404(mid)
     body = await request.json()
-    m = store.set_details(mid, body.get("people"), body.get("speakers_expected"), body.get("model"))
+    m = store.set_details(mid, body.get("people"), body.get("speakers_expected"))
     started = False
     if body.get("start") and m["status"] == "waiting":
         store.set_status(mid, "queued")
         _executor.submit(pipeline.process_meeting, mid)
         started = True
     return {"people": m["people"], "speakers_expected": m.get("speakers_expected"),
-            "model": m.get("model"), "started": started}
+            "started": started}
 
 
 @app.post("/api/meetings/{mid}/public")

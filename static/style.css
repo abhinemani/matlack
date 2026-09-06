@@ -131,7 +131,6 @@ select:hover { border-color: var(--action); }
 .chosen-actions .quiet { margin-left: auto; }
 .who-field { display: block; flex: 1 1 320px; min-width: 0; }
 .who-field.count-field { flex: 0 1 180px; }
-.who-field.model-field { flex: 0 1 220px; }
 .who-field select { width: 100%; font-size: 15px; padding: 7px 30px 7px 10px; border-radius: 8px; }
 input[type=number] { font: 15px var(--sans); border: 1px solid var(--rule); border-radius: 8px; padding: 7px 10px; width: 100%; background: var(--paper); color: var(--ink); transition: border-color .12s, box-shadow .12s; }
 input[type=number]:hover { border-color: #c9c5bc; }

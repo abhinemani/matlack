@@ -18,33 +18,13 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "data")).resolve()
 INBOX_DIR = Path(os.environ.get("INBOX_DIR", DATA_DIR / "inbox")).resolve()
 MEETINGS_DIR = DATA_DIR / "meetings"
 
-# Claude models the user can pick per meeting; the key is what gets stored.
-MODELS = {
-    "opus": {"id": "claude-opus-5", "label": "Opus 5", "note": "Default. Strong and reasonably quick."},
-    "sonnet": {"id": "claude-sonnet-5", "label": "Sonnet 5", "note": "Faster and cheaper; fine for clean recordings."},
-    "fable": {"id": "claude-fable-5-1", "label": "Fable 5.1", "note": "Most capable and most careful; slower and dearer."},
-}
-DEFAULT_MODEL = "opus"
+DEFAULT_MODEL_ID = "claude-opus-5"
 
 
-def model_key(name) -> str | None:
-    """Normalise a user's choice ("Fable", "claude-sonnet-5", "opus") to a key."""
-    if not name:
-        return None
-    s = str(name).strip().lower()
-    for k, v in MODELS.items():
-        if s in (k, v["id"], v["label"].lower()) or s.startswith(k):
-            return k
-    return None
-
-
-def model_id(meeting: dict | None) -> str:
-    """The API model for a meeting's Claude passes: the meeting's choice, else
-    CLAUDE_MODEL from .env, else Opus."""
-    key = model_key((meeting or {}).get("model"))
-    if key:
-        return MODELS[key]["id"]
-    return os.environ.get("CLAUDE_MODEL") or MODELS[DEFAULT_MODEL]["id"]
+def model_id(meeting: dict | None = None) -> str:
+    """The Claude model for naming, review and summaries: CLAUDE_MODEL from
+    .env if set, else Opus."""
+    return os.environ.get("CLAUDE_MODEL") or DEFAULT_MODEL_ID
 
 
 AUDIO_EXT = {".m4a", ".mp3", ".wav", ".mp4", ".aac", ".ogg", ".flac", ".webm", ".mov"}
@@ -136,8 +116,7 @@ def parse_people(text: str | list | None) -> list[str]:
 
 
 def create_from_file(src: Path, move: bool = True, people: list[str] | None = None,
-                     hold: bool = False, speakers_expected: int | None = None,
-                     model: str | None = None) -> dict:
+                     hold: bool = False, speakers_expected: int | None = None) -> dict:
     """Register an audio file as a new meeting. Moves (or copies) the audio
     into the meeting folder so the inbox stays clean. `people` is an optional,
     partial list of names the user already knows were there."""
@@ -165,7 +144,6 @@ def create_from_file(src: Path, move: bool = True, people: list[str] | None = No
         "speakers": {},
         "people": parse_people(people),
         "speakers_expected": _count(speakers_expected),
-        "model": model_key(model) or DEFAULT_MODEL,
         "log": [],
     }
     return save(meeting)
@@ -198,15 +176,13 @@ def _count(n) -> int | None:
 
 
 def set_details(mid: str, people: str | list | None = None,
-                speakers_expected=None, model: str | None = None) -> dict:
-    """What the user knows before transcription: names (partial is fine),
-    how many people spoke, and which Claude model to use. Any can be left out."""
+                speakers_expected=None) -> dict:
+    """What the user knows before transcription: names (partial is fine) and
+    how many people spoke. Either can be left out."""
     m = load(mid)
     if people is not None:
         m["people"] = parse_people(people)
     m["speakers_expected"] = _count(speakers_expected)
-    if model_key(model):
-        m["model"] = model_key(model)
     return save(m)
 
 

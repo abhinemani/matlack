@@ -6,8 +6,7 @@
   python transcribe.py run ~/Downloads/mtg  # process a specific folder (files are moved in)
   python transcribe.py run --watch          # keep watching the inbox
   python transcribe.py add file1.m4a file2.mp3
-  python transcribe.py add mtg.m4a --people "Vera Zubo" "Mark (interviewer)" --speakers 3 --model fable
-  python transcribe.py model <id> fable         # which Claude names, reviews and summarizes it (opus default)
+  python transcribe.py add mtg.m4a --people "Vera Zubo" "Mark (interviewer)" --speakers 3
   python transcribe.py people <id> "Vera Zubo" "Mark"   # names you know; guesses again
   python transcribe.py list
   python transcribe.py show <id>
@@ -53,25 +52,12 @@ def ask_people(mid: str) -> list[str]:
         raw = input(f"Who was in “{m['title']}”? Names you know, comma-separated, "
                     f"roles in parentheses (Enter to skip): ")
         count = input("How many people spoke? (Enter if unsure): ")
-        model = ask_model()
     except EOFError:
         return []
     people = store.parse_people(raw)
-    if people or store._count(count) or model:
-        store.set_details(mid, people, count, model)
+    if people or store._count(count):
+        store.set_details(mid, people, count)
     return people
-
-
-def ask_model() -> str | None:
-    """Which Claude does the naming, review and summary for this meeting."""
-    choices = " / ".join(f"[{k[0]}]{k[1:]} {v['label']}" for k, v in store.MODELS.items())
-    raw = input(f"Model: {choices} (Enter for Opus): ").strip().lower()
-    if not raw:
-        return None
-    key = store.model_key(raw) or next((k for k in store.MODELS if k.startswith(raw)), None)
-    if not key:
-        print(f"  didn't recognise “{raw}”; using Opus")
-    return key
 
 
 def _release_waiting(ids: list[str]) -> None:
@@ -109,10 +95,10 @@ def cmd_add(a):
     people = store.parse_people(a.people)
     for f in a.files:
         m = pipeline.ingest_file(Path(f), move=not a.copy, people=people)
-        if a.speakers or a.model:
-            store.set_details(m["id"], speakers_expected=a.speakers, model=a.model)
+        if a.speakers:
+            store.set_details(m["id"], speakers_expected=a.speakers)
         print("queued", m["id"])
-        if not people and not a.speakers and not a.model and _interactive(a):
+        if not people and not a.speakers and _interactive(a):
             ask_people(m["id"])
     if not a.no_run:
         pipeline.run_batch(workers=a.workers)
@@ -213,8 +199,7 @@ def cmd_summarize(a):
     if m["status"] != "ready":
         sys.exit(f"{a.id} is not transcribed yet (status: {m['status']})")
     guide = summarize.load_guide(a.guide)
-    print(f"Summarizing {m['title']} with “{guide['title']}” "
-          f"({os.environ.get('SUMMARY_MODEL') or store.model_id(m)})…")
+    print(f"Summarizing {m['title']} with “{guide['title']}” ({os.environ.get('SUMMARY_MODEL') or store.model_id()})…")
     m = summarize.run(a.id, a.guide)
     s = m["summary"]
     print(f"done: {sum(1 for x in s['sections'] if x['covered'])} of {len(s['sections'])} sections covered, "
@@ -227,16 +212,6 @@ def cmd_summarize(a):
 def cmd_guides(a):
     for g in summarize.list_guides():
         print(f"{g['id']:30} {g['title']}  ({g['sections']} sections)")
-
-
-def cmd_model(a):
-    m = store.load(a.id)
-    if a.name:
-        m = store.set_details(a.id, model=a.name)
-    key = store.model_key(m.get("model")) or store.DEFAULT_MODEL
-    print(f"{a.id}: {store.MODELS[key]['label']} ({store.model_id(m)})"
-          + ("" if a.name else "  — change with: python transcribe.py model <id> opus|sonnet|fable; "
-             "takes effect on the next guess, review or summary"))
 
 
 def cmd_repairs(a):
@@ -353,13 +328,8 @@ def main(argv=None):
     s.add_argument("--workers", type=int, default=3)
     s.add_argument("--people", nargs="+", metavar="NAME", help="names you know were there (partial is fine)")
     s.add_argument("--speakers", type=int, metavar="N", help="how many people spoke, if you know")
-    s.add_argument("--model", choices=list(store.MODELS), help="Claude model for this meeting (default opus)")
     s.add_argument("-y", "--yes", action="store_true", help="don't ask who was in each meeting")
     s.set_defaults(fn=cmd_add)
-
-    s = sub.add_parser("model", help="which Claude a meeting uses for naming, review and summary")
-    s.add_argument("id"); s.add_argument("name", nargs="?", choices=list(store.MODELS))
-    s.set_defaults(fn=cmd_model)
 
     sub.add_parser("list").set_defaults(fn=cmd_list)
 

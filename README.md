@@ -24,27 +24,20 @@ Drop recordings in `data/inbox/`, then:
 
     python transcribe.py run
 
-In a terminal it first asks three things about each new meeting: who was
-there, how many people spoke, and which Claude model to use. Answer with
-any names you already know (partial is fine, roles in parentheses), a head
-count if you are sure of it, and a model, or press Enter to skip any of
-them; `run -y` skips all three. The names give the speaker guesses
-something to go on; the count is passed to the diarizer so it keeps exactly
-that many voices apart, which matters most when people introduce themselves
-in quick succession. The model does the naming, the review and the summary
-for that meeting: Opus 5 by default, Sonnet 5 when speed and cost matter
-more, Fable 5.1 (Anthropic's most capable model, run at full effort) when
-you want the most careful answer and don't mind waiting or paying more.
-The same details can be given up front with
-`add <file> --people "Vera Zubo" "Mark" --speakers 4 --model fable`, chosen
-in the upload box on the web page, or added later:
+In a terminal it first asks two things about each new meeting: who was
+there, and how many people spoke. Answer with any names you already know
+(partial is fine, roles in parentheses) and a head count if you are sure of
+it, or press Enter to skip either; `run -y` skips both. The names give the
+speaker guesses something to go on; the count is passed to the diarizer so
+it keeps exactly that many voices apart, which matters most when people
+introduce themselves in quick succession. The same details can be given up
+front with `add <file> --people "Vera Zubo" "Mark" --speakers 4`, typed
+into the upload box on the web page, or added later:
 
     python transcribe.py people budget-kickoff "Vera Zubo (budget director)" "Mark"
-    python transcribe.py model budget-kickoff fable
 
-On a finished transcript `people` guesses the names again, keeping anything
-you have already confirmed; `model` changes which Claude does that from
-then on.
+On a finished transcript that guesses the names again, keeping anything you
+have already confirmed.
 
 Each meeting becomes `data/meetings/<id>/` with the audio, a `meeting.json`
 (the source of truth), and a `<id>.md` transcript with guessed names applied

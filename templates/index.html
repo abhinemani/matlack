@@ -55,11 +55,6 @@
         <input type="number" name="speakers_expected" id="speakers_expected" min="1" max="26" placeholder="e.g. 4" autocomplete="off">
         <small>If you know it. Helps keep voices apart.</small>
       </label>
-      <label class="who-field model-field">
-        <span>Model</span>
-        <select name="model" id="model">{% for k, v in store.MODELS.items() %}<option value="{{ k }}" {% if k == store.DEFAULT_MODEL %}selected{% endif %}>{{ v.label }}</option>{% endfor %}</select>
-        <small>Names speakers, reviews, summarizes. Fable is the most careful.</small>
-      </label>
     </div>
     <div>
       <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
@@ -93,8 +88,6 @@
         <input type="text" id="ask-people-{{ m.id }}" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off"></label>
       <label class="who-field count-field"><span>How many spoke?</span>
         <input type="number" id="ask-count-{{ m.id }}" min="1" max="26" value="{{ m.speakers_expected or '' }}" placeholder="e.g. 4" autocomplete="off"></label>
-      <label class="who-field model-field"><span>Model</span>
-        <select id="ask-model-{{ m.id }}">{% for k, v in store.MODELS.items() %}<option value="{{ k }}" {% if k == (m.model or store.DEFAULT_MODEL) %}selected{% endif %}>{{ v.label }}</option>{% endfor %}</select></label>
     </div>
     <div class="ask-actions">
       <button class="primary" onclick="startMeeting('{{ m.id }}', true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Start transcribing</button>
@@ -126,7 +119,7 @@
         </div>
         <div class="cell who">
           {% if names %}{% for n in names[:4] %}<span class="n">{{ n }}</span>{% endfor %}{% if names|length > 4 %} <span class="more">+{{ names|length - 4 }} more</span>{% endif %}
-          {% elif m.status != 'ready' %}<span class="more" title="What this meeting was given before transcription">{{ (m.people or ['no names given'])|join(', ') }}{% if m.speakers_expected %} · {{ m.speakers_expected }} speaker{{ '' if m.speakers_expected == 1 else 's' }}{% endif %} · {{ store.MODELS[store.model_key(m.model) or store.DEFAULT_MODEL].label }}</span>
+          {% elif m.status != 'ready' %}<span class="more" title="What this meeting was given before transcription">{{ (m.people or ['no names given'])|join(', ') }}{% if m.speakers_expected %} · {{ m.speakers_expected }} speaker{{ '' if m.speakers_expected == 1 else 's' }}{% endif %}</span>
           {% else %}<span class="more">—</span>{% endif %}
         </div>
         <div class="cell len">{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "—" }}</div>
@@ -166,9 +159,7 @@ function showChosen() {
 function describeChosen() {
   const people = document.getElementById('people').value.trim();
   const count = document.getElementById('speakers_expected').value.trim();
-  const model = document.getElementById('model');
-  const bits = [model.options[model.selectedIndex].text,
-                people ? 'names: ' + people : 'no names given',
+  const bits = [people ? 'names: ' + people : 'no names given',
                 count ? count + ' speaker' + (count === '1' ? '' : 's') : ''].filter(Boolean);
   document.getElementById('chosenWith').textContent = 'with ' + bits.join(' · ');
 }
@@ -179,7 +170,7 @@ function startUpload() {
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 input.addEventListener('change', showChosen);
-['people', 'speakers_expected', 'model'].forEach(id => document.getElementById(id).addEventListener('input', describeChosen));
+['people', 'speakers_expected'].forEach(id => document.getElementById(id).addEventListener('input', describeChosen));
 ['dragenter','dragover'].forEach(e => form.addEventListener(e, ev => { ev.preventDefault(); form.classList.add('over'); }));
 ['dragleave','drop'].forEach(e => form.addEventListener(e, ev => { ev.preventDefault(); form.classList.remove('over'); }));
 form.addEventListener('drop', ev => { input.files = ev.dataTransfer.files; showChosen(); });
@@ -202,7 +193,6 @@ async function startMeeting(id, withDetails) {
   if (withDetails) {
     body.people = document.getElementById('ask-people-' + id).value;
     body.speakers_expected = document.getElementById('ask-count-' + id).value;
-    body.model = document.getElementById('ask-model-' + id).value;
   }
   const r = await fetch(`/api/meetings/${id}/details`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   if (!r.ok) { alert('That didn\'t start: ' + (await r.text())); return; }

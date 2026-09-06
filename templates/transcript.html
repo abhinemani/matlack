@@ -32,7 +32,6 @@
       {% if m.duration_ms %}<span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b>{{ store.fmt_ts(m.duration_ms) }}</b></span>{% endif %}
       <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><b id="lineTotal">{{ m.utterances|length }}</b> lines</span>
       <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg><b id="spCount">{{ m.speakers|length }}</b> speakers</span>
-      <span class="item" title="Claude model used for naming, review and summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>{{ store.MODELS[store.model_key(m.model) or store.DEFAULT_MODEL].label }}</span>
       <span class="status {{ m.status }}">{{ m.status }}</span>
     </div>
   </div>
@@ -67,8 +66,6 @@
           <input type="text" id="people" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off"></label>
         <label class="who-field count-field"><span>How many spoke?</span>
           <input type="number" id="count" min="1" max="26" value="{{ m.speakers_expected or '' }}" placeholder="e.g. 4" autocomplete="off"></label>
-        <label class="who-field model-field"><span>Model</span>
-          <select id="model">{% for k, v in store.MODELS.items() %}<option value="{{ k }}" {% if k == (m.model or store.DEFAULT_MODEL) %}selected{% endif %}>{{ v.label }}</option>{% endfor %}</select></label>
       </div>
       <div class="ask-actions">
         <button class="primary" onclick="startMeeting(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Start transcribing</button>
@@ -78,7 +75,7 @@
     <script>
       async function startMeeting(withDetails) {
         const body = {start: true};
-        if (withDetails) { body.people = document.getElementById('people').value; body.speakers_expected = document.getElementById('count').value; body.model = document.getElementById('model').value; }
+        if (withDetails) { body.people = document.getElementById('people').value; body.speakers_expected = document.getElementById('count').value; }
         const r = await fetch(`/api/meetings/{{ m.id }}/details`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
         if (!r.ok) { alert('That didn\'t start: ' + (await r.text())); return; }
         location.reload();
