@@ -55,6 +55,11 @@
         <input type="number" name="speakers_expected" id="speakers_expected" min="1" max="26" placeholder="e.g. 4" autocomplete="off">
         <small>If you know it. Helps keep voices apart.</small>
       </label>
+      <label class="who-field model-field">
+        <span>Model</span>
+        <select name="model" id="model">{% for k, v in store.MODELS.items() %}<option value="{{ k }}" {% if k == store.DEFAULT_MODEL %}selected{% endif %}>{{ v.label }}</option>{% endfor %}</select>
+        <small>Names speakers, reviews, summarizes. Fable is the most careful.</small>
+      </label>
     </div>
     <div>
       <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
@@ -80,6 +85,8 @@
         <input type="text" id="ask-people-{{ m.id }}" value="{{ (m.people or [])|join(', ') }}" placeholder="e.g. Vera Zubo (budget director), Mark" autocomplete="off"></label>
       <label class="who-field count-field"><span>How many spoke?</span>
         <input type="number" id="ask-count-{{ m.id }}" min="1" max="26" value="{{ m.speakers_expected or '' }}" placeholder="e.g. 4" autocomplete="off"></label>
+      <label class="who-field model-field"><span>Model</span>
+        <select id="ask-model-{{ m.id }}">{% for k, v in store.MODELS.items() %}<option value="{{ k }}" {% if k == (m.model or store.DEFAULT_MODEL) %}selected{% endif %}>{{ v.label }}</option>{% endfor %}</select></label>
     </div>
     <div class="ask-actions">
       <button class="primary" onclick="startMeeting('{{ m.id }}', true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Start transcribing</button>
@@ -159,6 +166,7 @@ async function startMeeting(id, withDetails) {
   if (withDetails) {
     body.people = document.getElementById('ask-people-' + id).value;
     body.speakers_expected = document.getElementById('ask-count-' + id).value;
+    body.model = document.getElementById('ask-model-' + id).value;
   }
   const r = await fetch(`/api/meetings/${id}/details`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   if (!r.ok) { alert('That didn\'t start: ' + (await r.text())); return; }

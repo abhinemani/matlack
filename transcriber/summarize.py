@@ -15,7 +15,7 @@ import re
 import time
 from pathlib import Path
 
-from . import store
+from . import naming, store
 
 GUIDES_DIR = Path(os.environ.get("GUIDES_DIR", Path(__file__).resolve().parent.parent / "guides"))
 DEFAULT_GUIDE = os.environ.get("DEFAULT_GUIDE", "efficiency-review")
@@ -51,23 +51,45 @@ Rules:
 - Interviewers' own remarks are context, not answers. Do not summarize them
   as the interviewee's views.
 
-Respond with ONLY a JSON object, no prose and no code fences, shaped exactly:
+Respond with a JSON object shaped exactly:
 {
   "overview": "3-4 sentences: who was interviewed (name and role if stated), which department, and the overall picture that emerged.",
-  "sections": {
-    "<section id>": {
+  "sections": [
+    {
+      "id": "<section id from the guide>",
       "covered": true | false,
       "summary": "1-3 sentences answering the section's question.",
       "points": ["at most three short, specific bullets"],
       "quotes": [{"text": "at most one verbatim quote", "speaker": "name", "time": "mm:ss"}]
     }
-  },
+  ],
   "priorities": ["up to three of the interviewee's own top priorities, in their order, or empty"],
   "follow_ups": ["up to four: things promised, questions left open, or claims worth verifying"]
 }
-Include every section id from the guide in "sections". Quotes are optional;
-use one only when it says something the summary cannot. Empty arrays are
-fine."""
+Include every section id from the guide, once each, in "sections". Quotes
+are optional; use one only when it says something the summary cannot. Empty
+arrays are fine."""
+
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "overview": {"type": "string"},
+        "sections": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "covered": {"type": "boolean"},
+                           "summary": {"type": "string"},
+                           "points": {"type": "array", "items": {"type": "string"}},
+                           "quotes": {"type": "array", "items": {
+                               "type": "object",
+                               "properties": {"text": {"type": "string"}, "speaker": {"type": "string"},
+                                              "time": {"type": "string"}},
+                               "required": ["text", "speaker", "time"], "additionalProperties": False}}},
+            "required": ["id", "covered", "summary", "points", "quotes"], "additionalProperties": False}},
+        "priorities": {"type": "array", "items": {"type": "string"}},
+        "follow_ups": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["overview", "sections", "priorities", "follow_ups"], "additionalProperties": False,
+}
 
 
 # --- guides ------------------------------------------------------------------
@@ -166,10 +188,13 @@ def summarize(meeting: dict, guide: dict) -> dict:
               f"{max(40, (MAX_WORDS - 200) // max(n, 1))} words each after the overview).\n\n"
               f"Meeting: {meeting['title']}\nSpeakers: {speakers}\n\n"
               f"Transcript:\n\n{render_transcript(meeting)}")
+    # The meeting's chosen model, unless SUMMARY_MODEL pins one for all summaries.
+    model = os.environ.get("SUMMARY_MODEL") or store.model_id(meeting)
     with client.messages.stream(
-        model=MODEL, max_tokens=16000, system=SYSTEM,
+        model=model, max_tokens=16000, system=SYSTEM,
         thinking={"type": "adaptive"},
         messages=[{"role": "user", "content": prompt}],
+        **naming.request_options(model, SCHEMA),
     ) as stream:
         resp = stream.get_final_message()
     if resp.stop_reason == "refusal":
@@ -177,9 +202,12 @@ def summarize(meeting: dict, guide: dict) -> dict:
     raw = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
     data = _parse(raw)
 
+    got = data.get("sections") or {}
+    if isinstance(got, list):  # the schema's shape: a list with ids
+        got = {str(x.get("id")): x for x in got if isinstance(x, dict)}
     sections = []
     for s in guide["sections"]:
-        d = (data.get("sections") or {}).get(s["id"]) or {}
+        d = got.get(s["id"]) or {}
         sections.append({
             "id": s["id"], "title": s["title"], "question": s["question"],
             "covered": bool(d.get("covered", bool(d.get("summary")))),
@@ -194,7 +222,7 @@ def summarize(meeting: dict, guide: dict) -> dict:
     return {
         "status": "ready", "error": None, "words": words,
         "guide": guide["id"], "guide_title": guide["title"],
-        "model": MODEL, "created": time.time(),
+        "model": model, "created": time.time(),
         "overview": (data.get("overview") or "").strip(),
         "sections": sections,
         "priorities": [str(p).strip() for p in data.get("priorities") or []],

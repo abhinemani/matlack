@@ -57,15 +57,39 @@ use the listed spelling and say so. Never assign a listed name to a label just
 because the list has a name left over. The user may also have confirmed some
 labels already; keep those and use them as anchors.
 
-Respond with ONLY a JSON object, no prose and no code fences:
+Respond with a JSON object of this shape:
 {
   "clues": [{"line": 12, "label": "B", "kind": "self-introduction" | "addressed" |
              "third-person" | "role", "quote": "short quote", "means": "what it implies"}],
   "merged_lines": [{"line": 1, "note": "why this line seems to hold two people"}],
-  "speakers": {"A": {"name": "Vera Zubo" | null, "confidence": "high" | "medium" | "low",
-                     "evidence": "one sentence citing line numbers, e.g. #3 self-introduction; addressed at #40, #57"}}
+  "speakers": [{"label": "A", "name": "Vera Zubo" | null, "confidence": "high" | "medium" | "low",
+                "evidence": "one sentence citing line numbers, e.g. #3 self-introduction; addressed at #40, #57"}]
 }
-Every label must appear under "speakers"."""
+Every label must appear once in "speakers"."""
+
+# The API enforces this shape, so a stray quote in a name can't break parsing.
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "clues": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"line": {"type": "integer"}, "label": {"type": "string"},
+                           "kind": {"type": "string", "enum": ["self-introduction", "addressed", "third-person", "role"]},
+                           "quote": {"type": "string"}, "means": {"type": "string"}},
+            "required": ["line", "label", "kind", "quote", "means"], "additionalProperties": False}},
+        "merged_lines": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"line": {"type": "integer"}, "note": {"type": "string"}},
+            "required": ["line", "note"], "additionalProperties": False}},
+        "speakers": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"label": {"type": "string"}, "name": {"type": ["string", "null"]},
+                           "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                           "evidence": {"type": "string"}},
+            "required": ["label", "name", "confidence", "evidence"], "additionalProperties": False}},
+    },
+    "required": ["clues", "merged_lines", "speakers"], "additionalProperties": False,
+}
 
 MAX_CHARS = int(os.environ.get("NAMING_MAX_CHARS", "600000"))
 
@@ -93,7 +117,36 @@ def _render(utterances: list[dict]) -> str:
 def _parse(text: str) -> dict:
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     m = re.search(r"\{.*\}", text, flags=re.S)
-    return json.loads(m.group(0) if m else text)
+    body = m.group(0) if m else text
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return json.loads(_escape_inner_quotes(body))
+
+
+def _escape_inner_quotes(s: str) -> str:
+    """The one malformation seen in practice: a bare double quote inside a
+    string value (a quoted phrase in a transcript line). A quote that closes
+    a string is followed by whitespace and then , } ] or : ; any other quote
+    inside a string is content, so escape it."""
+    out, in_str, i, n = [], False, 0, len(s)
+    while i < n:
+        c = s[i]
+        if in_str:
+            if c == "\\":
+                out.append(s[i:i + 2]); i += 2; continue
+            if c == '"':
+                j = i + 1
+                while j < n and s[j] in " \t\r\n":
+                    j += 1
+                if j >= n or s[j] in ",}]:":
+                    in_str = False
+                else:
+                    out.append('\\"'); i += 1; continue
+        elif c == '"':
+            in_str = True
+        out.append(c); i += 1
+    return "".join(out)
 
 
 def _context(people: list[str] | None, known: dict[str, str] | None,
@@ -110,9 +163,21 @@ def _context(people: list[str] | None, known: dict[str, str] | None,
     return ("\n\n".join(parts) + "\n\n") if parts else ""
 
 
+def request_options(model: str, schema: dict | None = None) -> dict:
+    """Per-model request extras. Fable thinks by default and is the pick for
+    people who want the most careful answer, so it runs at top effort. A
+    schema makes the API guarantee well-formed JSON."""
+    cfg = {}
+    if "fable" in model:
+        cfg["effort"] = "max"
+    if schema:
+        cfg["format"] = {"type": "json_schema", "schema": schema}
+    return {"output_config": cfg} if cfg else {}
+
+
 def guess_names(utterances: list[dict], people: list[str] | None = None,
                 known: dict[str, str] | None = None,
-                expected: int | None = None) -> dict[str, dict]:
+                expected: int | None = None, model: str | None = None) -> dict[str, dict]:
     """Returns {label: {guess, confidence, evidence}} plus, under the key
     "_notes", the clue list and suspected merged lines. Empty dict if no key.
     `people` are names the user supplied ahead of time; `known` maps labels the
@@ -122,14 +187,14 @@ def guess_names(utterances: list[dict], people: list[str] | None = None,
         return {}
     import anthropic
 
-    model = os.environ.get("CLAUDE_MODEL", "claude-opus-5")
+    model = model or os.environ.get("CLAUDE_MODEL", "claude-opus-5")
     client = anthropic.Anthropic(api_key=api_key)
     labels = sorted({u["speaker"] for u in utterances})
     prompt = (_context(people, known, expected)
               + f"Speaker labels present: {', '.join(labels)}\n\nTranscript:\n\n"
               + _render(utterances))
     request = dict(model=model, max_tokens=16000, system=SYSTEM,
-                   messages=[{"role": "user", "content": prompt}])
+                   messages=[{"role": "user", "content": prompt}], **request_options(model, SCHEMA))
     # Server-side refusal fallback, so an unlikely safety decline on a
     # transcript still yields names from another model. Older API surfaces
     # reject the parameter; fall back to a plain request then.
@@ -146,6 +211,8 @@ def guess_names(utterances: list[dict], people: list[str] | None = None,
     raw = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
     data = _parse(raw)
     speakers = data.get("speakers") or {k: v for k, v in data.items() if k in labels}
+    if isinstance(speakers, list):  # the schema's shape: one entry per label
+        speakers = {s.get("label"): s for s in speakers if isinstance(s, dict)}
     out = {}
     for label in labels:
         g = speakers.get(label) or {}

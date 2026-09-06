@@ -57,13 +57,28 @@ Rules:
   punctuation and capitalisation.
 - At most 40 proposals; the most consequential first.
 
-Respond with ONLY a JSON object, no prose, no code fences:
+Respond with a JSON object of this shape (fields that don't apply are null):
 {"repairs": [
   {"kind": "reassign", "line": 9, "to": "C", "reason": "..."},
   {"kind": "reassign", "line": 33, "new_name": "Lucy", "reason": "..."},
   {"kind": "split", "line": 1, "at": "Good morning, I'm Michelle Day.", "second": "B", "reason": "..."},
   {"kind": "replace", "line": null, "find": "Lucia", "replace": "Alicia", "reason": "..."}
 ]}"""
+
+_S = {"type": ["string", "null"]}
+SCHEMA = {
+    "type": "object",
+    "properties": {"repairs": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"kind": {"type": "string", "enum": ["reassign", "split", "replace"]},
+                       "line": {"type": ["integer", "null"]}, "to": _S, "new_name": _S,
+                       "at": _S, "second": _S, "second_name": _S, "find": _S, "replace": _S,
+                       "reason": {"type": "string"}},
+        "required": ["kind", "line", "to", "new_name", "at", "second", "second_name",
+                     "find", "replace", "reason"],
+        "additionalProperties": False}}},
+    "required": ["repairs"], "additionalProperties": False,
+}
 
 
 def _key(m: dict) -> str:
@@ -83,7 +98,7 @@ def propose(m: dict) -> dict:
         return {"created": time.time(), "model": None, "items": []}
     import anthropic
 
-    model = os.environ.get("CLAUDE_MODEL", "claude-opus-5")
+    model = store.model_id(m)
     client = anthropic.Anthropic(api_key=api_key)
     parts = ["Speaker key:\n" + _key(m)]
     if m.get("people"):
@@ -95,7 +110,8 @@ def propose(m: dict) -> dict:
                      + "\n".join(f"- #{x.get('line')}: {x.get('note')}" for x in merged))
     parts.append("Transcript:\n\n" + naming._render(m["utterances"]))
     request = dict(model=model, max_tokens=16000, system=SYSTEM,
-                   messages=[{"role": "user", "content": "\n\n".join(parts)}])
+                   messages=[{"role": "user", "content": "\n\n".join(parts)}],
+                   **naming.request_options(model, SCHEMA))
     try:
         with client.messages.stream(
             **request,

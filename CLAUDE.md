@@ -14,11 +14,15 @@ transcripts. Read this before doing anything.
   .md exports by hand — regenerate them with `python transcribe.py export <id>`.
 
 ## Common requests and the right command
-- "Transcribe the new files" → `python transcribe.py run`
-  (in a terminal it asks who was in each new meeting and how many spoke;
-  `-y` skips; `add <file> --people ... --speakers N` gives both up front.
-  Files the web page found in the inbox sit as `waiting` until someone
-  answers on the Meetings page or `run` asks in the terminal)
+- "Transcribe the new files" → first ask which Claude model to use for the
+  meeting: Opus 5 (default), Sonnet 5 (faster, cheaper) or Fable 5.1 (most
+  careful, slower, dearer); also ask who was there and how many spoke if
+  the user hasn't said. Then `python transcribe.py run -y` after setting
+  details, or `add <file> --people ... --speakers N --model opus|sonnet|fable`.
+  `python transcribe.py model <id> fable` changes it for an existing meeting
+  (takes effect on the next guess, review or summary). In a terminal `run`
+  asks these itself; `-y` skips. Files the web page found in the inbox sit
+  as `waiting` until someone answers on the Meetings page or `run` asks.
 - "Vera and Mark were in that meeting" → `python transcribe.py people <id> "Vera Zubo" "Mark (interviewer)"`
   (optional, partial list; stored under `people` and used by the name guesses;
   on a finished transcript it guesses again, keeping confirmed names)

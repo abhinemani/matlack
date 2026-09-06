@@ -58,7 +58,8 @@ def process_meeting(mid: str) -> dict:
         log(f"[{mid}] {len(utterances)} utterances, {len(labels)} speakers; guessing names")
         try:
             guesses = naming.guess_names(utterances, people=m.get("people"),
-                                         expected=m.get("speakers_expected"))
+                                         expected=m.get("speakers_expected"),
+                                         model=store.model_id(m))
         except Exception as e:  # naming is best-effort
             log(f"[{mid}] name guessing failed: {e}")
             guesses = {}
@@ -94,7 +95,7 @@ def reguess(mid: str) -> dict:
     known = {l: sp["name"] for l, sp in m["speakers"].items()
              if sp.get("confirmed") and sp.get("name")}
     guesses = naming.guess_names(m["utterances"], people=m.get("people"), known=known,
-                                 expected=m.get("speakers_expected"))
+                                 expected=m.get("speakers_expected"), model=store.model_id(m))
     m = store.load(mid)
     m["naming"] = guesses.pop("_notes", None)
     for label, g in guesses.items():
