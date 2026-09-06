@@ -145,6 +145,13 @@ The speaker panel also lists lines where the naming pass thinks two
 people's turns were run together by the diarizer; click one to jump there
 and reassign or split it by hand.
 
+Above the transcript, **What changed** is the record of everything the tool
+did to it: each line the tidying pass touched, shown as the recorded text
+with the removals struck through and any additions marked, every suggested
+fix that was applied and why, and any line where a tidy was refused and the
+recording left alone. Click a timestamp to jump to that line in the
+transcript. A transcript nothing has touched says so.
+
 ## What happens to a recording
 
 1. You say who was there and how many spoke (optional, either place).

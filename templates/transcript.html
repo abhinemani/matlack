@@ -132,7 +132,10 @@
 
     <div class="stream-wrap">
       <div class="stream-head">
-        <h2>Transcript</h2>
+        <div class="tabs" role="tablist">
+          <button class="tab on" id="tabTranscript" type="button" role="tab" aria-selected="true" onclick="showTab('transcript')">Transcript</button>
+          <button class="tab" id="tabChanges" type="button" role="tab" aria-selected="false" onclick="showTab('changes')">What changed<span class="n" id="changeCount"></span></button>
+        </div>
         <span class="n" id="lineCount"></span>
         <label class="find">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -141,6 +144,7 @@
         </label>
       </div>
       <section class="stream" id="stream"></section>
+      <section class="stream changes" id="changes" hidden></section>
     </div>
   </div>
 
@@ -335,6 +339,7 @@ function renderMerged() {
     <span class="fine">Check who is talking.</span></div>`;
 }
 function jumpTo(i) {
+  if (!document.getElementById('changes').hidden) showTab('transcript');
   const row = document.querySelector(`.u[data-i="${i}"]`); if (!row) return;
   document.querySelectorAll('.u.target').forEach(r => r.classList.remove('target'));
   row.classList.add('target'); row.scrollIntoView({block: 'center', behavior: 'smooth'});
@@ -401,7 +406,110 @@ async function reviewAgain() {
   if (!r.ok) { alert('That didn\'t work: ' + (await r.text())); b.disabled = false; b.lastChild.textContent = 'Review again'; return; }
   takeRepairs(await r.json());
 }
-function render() { renderKey(); renderMerged(); renderRepairs(); renderStream(); }
+// --- what changed --------------------------------------------------------
+// Nothing that edits a transcript here does so silently: the tidying pass
+// keeps the recorded text of every line it touched in "raw", and every
+// applied fix records what it did. This tab is that record, so a person can
+// see what was done to a transcript before approving it.
+
+function wordDiff(before, after) {
+  const a = before.split(/(\s+)/).filter(x => x !== ''), b = after.split(/(\s+)/).filter(x => x !== '');
+  const n = a.length, m = b.length;
+  // Longest common subsequence over words; transcript lines are short enough
+  // for the table to be cheap, and it gives a far tighter diff than a
+  // character walk would.
+  const L = Array.from({length: n + 1}, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  const flush = (kind, buf) => { if (buf.length) out.push(`<${kind}>${esc(buf.join(''))}</${kind}>`); };
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push(esc(a[i])); i++; j++; continue; }
+    const dels = [], adds = [];
+    while (i < n && j < m && a[i] !== b[j]) {
+      if (L[i + 1][j] >= L[i][j + 1]) dels.push(a[i++]); else adds.push(b[j++]);
+    }
+    flush('del', dels); flush('ins', adds);
+  }
+  flush('del', a.slice(i)); flush('ins', b.slice(j));
+  return out.join('');
+}
+
+function changeList() {
+  const tidied = [];
+  (meeting.utterances || []).forEach((u, i) => { if (u.raw && u.raw !== u.text) tidied.push({i, u}); });
+  const fixes = ((meeting.repairs || {}).items || []).filter(r => r.status === 'applied');
+  const kept = ((meeting.cleanup || {}).notes) || [];
+  return {tidied, fixes, kept};
+}
+
+function renderChanges() {
+  const {tidied, fixes, kept} = changeList();
+  const c = meeting.cleanup || {};
+  const badge = document.getElementById('changeCount');
+  const n = tidied.length + fixes.length;
+  badge.textContent = n || '';
+  badge.hidden = !n;
+
+  const bits = [];
+  if (c.status === 'done') bits.push(`${c.changed} of ${c.lines} lines tidied`);
+  if (fixes.length) bits.push(`${fixes.length} fix${fixes.length === 1 ? '' : 'es'} applied`);
+  if (kept.length) bits.push(`${kept.length} left as recorded`);
+
+  const line = (i, u, body, tag) => `<div class="chg">
+      <div class="chg-head"><a href="#" onclick="jumpTo(${i});return false" title="Jump to this line">${fmt(u.start)}</a>
+        <span class="chg-who" style="--c:${color(u.speaker)}">${esc(nameOf(u.speaker))}</span>
+        <span class="chg-tag ${tag}">${tag === 'tidied' ? 'text tidied' : 'fix applied'}</span></div>
+      <div class="chg-body">${body}</div></div>`;
+
+  let html = `<div class="chg-top"><b>What changed</b>${bits.length ? `<span class="fine">${bits.join(' · ')}</span>` : ''}</div>`;
+
+  if (!n && !kept.length) {
+    html += `<p class="fine chg-empty">${c.status === 'running' ? 'Tidying the text… reload in a minute.'
+      : c.status === 'error' ? 'The tidying pass didn\'t finish.'
+      : 'Nothing has been changed. This is the transcript exactly as recorded.'}</p>`;
+  }
+
+  if (tidied.length) {
+    html += `<h3 class="chg-sec">Text tidied <span class="n">${tidied.length}</span></h3>
+      <p class="fine chg-note">Filler words, false starts and punctuation only. Nothing was reworded, and no name or number was changed. The recorded text is kept — <code>python transcribe.py clean ${esc(id)} --undo</code> restores all of it.</p>`;
+    html += tidied.map(({i, u}) => line(i, u, wordDiff(u.raw, u.text), 'tidied')).join('');
+  }
+  if (fixes.length) {
+    html += `<h3 class="chg-sec">Fixes applied <span class="n">${fixes.length}</span></h3>`;
+    html += fixes.map(r => {
+      const u = Number.isInteger(r.line) ? meeting.utterances[r.line] : null;
+      // describeRepair already escapes its own values and returns markup.
+      const body = `<div class="chg-what">${describeRepair(r)}</div><div class="fix-why">${esc(r.reason || '')}</div>`;
+      return u ? line(r.line, u, body, 'fix')
+               : `<div class="chg"><div class="chg-head"><span class="all">all lines</span>
+                    <span class="chg-tag fix">fix applied</span></div><div class="chg-body">${body}</div></div>`;
+    }).join('');
+  }
+  if (kept.length) {
+    html += `<h3 class="chg-sec">Left as recorded <span class="n">${kept.length}</span></h3>
+      <p class="fine chg-note">The tidying pass proposed an edit here and it was refused, so these lines are untouched.</p>
+      <ul class="chg-kept">${kept.map(k => `<li>${esc(k)}</li>`).join('')}</ul>`;
+  }
+  document.getElementById('changes').innerHTML = html;
+}
+
+function showTab(which) {
+  const onChanges = which === 'changes';
+  document.getElementById('stream').hidden = onChanges;
+  document.getElementById('changes').hidden = !onChanges;
+  document.getElementById('tabTranscript').classList.toggle('on', !onChanges);
+  document.getElementById('tabChanges').classList.toggle('on', onChanges);
+  document.getElementById('tabTranscript').setAttribute('aria-selected', String(!onChanges));
+  document.getElementById('tabChanges').setAttribute('aria-selected', String(onChanges));
+  // Find searches the transcript, so it has nothing to act on over here.
+  document.querySelector('.stream-head .find').hidden = onChanges;
+  document.getElementById('lineCount').hidden = onChanges;
+}
+
+function render() { renderKey(); renderMerged(); renderRepairs(); renderStream(); renderChanges(); }
 document.getElementById('people').value = (meeting.people || []).join(', ');
 
 let findTimer;

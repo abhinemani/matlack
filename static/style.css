@@ -267,6 +267,35 @@ main:has(.player) .key { max-height: calc(100vh - 156px); }  /* leave room for t
 .stream-head .find svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--faint); pointer-events: none; }
 .stream-head .find input { padding: 6px 10px 6px 30px; font-size: 13.5px; }
 .stream-head .find .hits { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; }
+/* ---- tabs over the transcript, and the "what changed" record ---- */
+.stream-head .tabs { display: flex; gap: 2px; flex: none; }
+.stream-head .tab { font: 600 15px/1 var(--serif); color: var(--muted); background: none; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.stream-head .tab:hover { color: var(--ink); background: var(--paper-2); }
+.stream-head .tab.on { color: var(--ink); background: var(--action-soft); }
+.stream-head .tab .n { font: 600 11.5px var(--sans); color: var(--action); background: var(--paper); border: 1px solid var(--action-rule); border-radius: 999px; padding: 0 6px; }
+.stream-head .tab .n:empty { display: none; }
+.changes { padding: 0 0 14px; }
+.chg-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 14px 18px 10px; border-bottom: 1px solid var(--rule-soft); }
+.chg-top b { font: 600 15px var(--serif); }
+.chg-sec { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 0; padding: 0 18px; display: flex; align-items: center; gap: 8px; }
+.chg-sec .n { font-size: 11.5px; color: var(--faint); background: var(--page); border: 1px solid var(--rule); border-radius: 999px; padding: 0 6px; letter-spacing: 0; }
+.chg-note { padding: 6px 18px 0; max-width: 68ch; }
+.chg-note code { font-size: 12px; }
+.chg-empty { padding: 16px 18px; }
+.chg { padding: 12px 18px; border-bottom: 1px solid var(--rule-soft); }
+.chg:last-child { border-bottom: 0; }
+.chg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12.5px; flex-wrap: wrap; }
+.chg-head > a { color: var(--muted); font-variant-numeric: tabular-nums; text-decoration: none; }
+.chg-head > a:hover { color: var(--action); text-decoration: underline; }
+.chg-who { font-weight: 600; color: var(--c, var(--ink)); }
+.chg-head .all { color: var(--faint); }
+.chg-tag { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 1px 7px; color: var(--muted); background: var(--page); border: 1px solid var(--rule); }
+.chg-tag.fix { color: var(--action); background: var(--action-soft); border-color: var(--action-rule); }
+.chg-body { font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.chg-body del { text-decoration: none; color: var(--bad); background: var(--bad-bg); border-radius: 3px; padding: 0 1px; text-decoration-line: line-through; text-decoration-thickness: 1px; }
+.chg-body ins { text-decoration: none; color: var(--good); background: var(--good-bg); border-radius: 3px; padding: 0 1px; }
+.chg-what { font-weight: 500; }
+.chg-kept { margin: 8px 0 0; padding: 0 18px 0 34px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
 .stream { background: var(--paper); border: 1px solid var(--rule); border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow-sm); padding: 8px 0 14px; }
 
 /* An utterance: icon | time | (name, text). The name control and the text

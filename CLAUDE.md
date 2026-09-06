@@ -50,6 +50,9 @@ transcripts. Read this before doing anything.
 - "Add a question to the interview guide" → edit `guides/<name>.md`
   (`## Section` = one question, first line is the question, `- ` = probes),
   then re-run `summarize`
+- "What was changed / show me the edits" → the **What changed** tab above the
+  transcript in the web page (tidied lines as before/after, applied fixes,
+  and anything left as recorded); `clean <id> --undo` reverses the tidying.
 - "Open the editor" → `python serve.py` then http://127.0.0.1:8000
 - "Publish <meeting> / put it on the site" → `python transcribe.py publish <id>`
   (approves it and pushes the read-only site; needs PUBLISH_* in `.env`)
