@@ -149,8 +149,33 @@ def _escape_inner_quotes(s: str) -> str:
     return "".join(out)
 
 
+def _heard(heard: list[dict] | None, limit: int = 60) -> str:
+    """Names, roles and organizations the transcriber's own entity detection
+    picked out, with the time each was said. A shortlist to check against the
+    transcript, not an answer: a name here may belong to someone who was
+    never in the room, and the same person appears many times."""
+    rows = []
+    for kind in ("person_name", "occupation", "organization"):
+        seen: dict[str, str] = {}
+        for e in heard or []:
+            if e.get("kind") != kind:
+                continue
+            text = (e.get("text") or "").strip()
+            if text and text.lower() not in seen:
+                seen[text.lower()] = f"{text} (first at {_ts(e.get('start'))})"
+        if seen:
+            label = {"person_name": "Names", "occupation": "Roles",
+                     "organization": "Organizations"}[kind]
+            rows.append(f"{label} heard: " + "; ".join(list(seen.values())[:limit]))
+    if not rows:
+        return ""
+    return ("The transcriber flagged these while listening; treat them as "
+            "candidates to verify against the lines, not as assignments.\n"
+            + "\n".join(rows))
+
+
 def _context(people: list[str] | None, known: dict[str, str] | None,
-             expected: int | None) -> str:
+             expected: int | None, heard: list[dict] | None = None) -> str:
     parts = []
     if people:
         parts.append("People the user says were there (partial, not all of them "
@@ -160,6 +185,9 @@ def _context(people: list[str] | None, known: dict[str, str] | None,
     if known:
         parts.append("Already confirmed by the user:\n"
                      + "\n".join(f"- Speaker {l} is {n}" for l, n in sorted(known.items())))
+    block = _heard(heard)
+    if block:
+        parts.append(block)
     return ("\n\n".join(parts) + "\n\n") if parts else ""
 
 
@@ -170,7 +198,8 @@ def request_options(model: str, schema: dict | None = None) -> dict:
 
 def guess_names(utterances: list[dict], people: list[str] | None = None,
                 known: dict[str, str] | None = None,
-                expected: int | None = None, model: str | None = None) -> dict[str, dict]:
+                expected: int | None = None, model: str | None = None,
+                heard: list[dict] | None = None) -> dict[str, dict]:
     """Returns {label: {guess, confidence, evidence}} plus, under the key
     "_notes", the clue list and suspected merged lines. Empty dict if no key.
     `people` are names the user supplied ahead of time; `known` maps labels the
@@ -183,7 +212,7 @@ def guess_names(utterances: list[dict], people: list[str] | None = None,
     model = model or os.environ.get("CLAUDE_MODEL", "claude-opus-5")
     client = anthropic.Anthropic(api_key=api_key)
     labels = sorted({u["speaker"] for u in utterances})
-    prompt = (_context(people, known, expected)
+    prompt = (_context(people, known, expected, heard)
               + f"Speaker labels present: {', '.join(labels)}\n\nTranscript:\n\n"
               + _render(utterances))
     request = dict(model=model, max_tokens=16000, system=SYSTEM,

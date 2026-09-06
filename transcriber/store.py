@@ -104,6 +104,49 @@ def modify(mid: str, fn) -> dict:
         return save(m)
 
 
+# --- word timings ------------------------------------------------------------
+# The transcriber returns every word with its own start, end and confidence.
+# It rides along with the transcript at no extra cost and is worth keeping:
+# it turns a split from an estimate into an exact cut, and it says which words
+# the transcriber was unsure of. It lives beside meeting.json rather than in
+# it because it is several times the size and nothing but these two uses
+# reads it — a missing words.json is fine everywhere.
+
+def words_path(mid: str) -> Path:
+    return meeting_dir(mid) / "words.json"
+
+
+def save_words(mid: str, words: list[dict]) -> None:
+    if not words:
+        return
+    p = words_path(mid)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f".{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    with _write_lock:
+        tmp.write_text(json.dumps(words, ensure_ascii=False))
+        tmp.replace(p)
+
+
+def load_words(mid: str) -> list[dict]:
+    p = words_path(mid)
+    if not p.is_file():
+        return []
+    try:
+        data = json.loads(p.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def words_between(words: list[dict], start, end, pad: int = 250) -> list[dict]:
+    """The words spoken inside one utterance's window. The padding absorbs the
+    rounding between an utterance's bounds and its first and last word."""
+    if not words or not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+        return []
+    lo, hi = start - pad, end + pad
+    return [w for w in words if isinstance(w.get("s"), (int, float)) and lo <= w["s"] <= hi]
+
+
 def list_meetings() -> list[dict]:
     ensure_dirs()
     out = []

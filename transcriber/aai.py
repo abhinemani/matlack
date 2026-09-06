@@ -37,15 +37,36 @@ def upload(path: Path, chunk_size: int = 5 * 1024 * 1024) -> str:
         return r.json()["upload_url"]
 
 
+def _clip_words(text: str, limit: int) -> str:
+    words = text.split()
+    return text if len(words) <= limit else " ".join(words[:limit])
+
+
 def submit(audio_url: str, speech_model: str | None = None,
            language_code: str | None = None, speakers_expected: int | None = None,
-           keyterms: list[str] | None = None, advanced_diarization: bool = False) -> str:
+           keyterms: list[str] | None = None, advanced_diarization: bool = False,
+           context: str | None = None, custom_spelling: list[dict] | None = None,
+           entity_detection: bool = False) -> str:
     body = {
         "audio_url": audio_url,
         "speaker_labels": True,
         "punctuate": True,
         "format_text": True,
     }
+    if context:
+        # Free text about the meeting: title, who was there, the interview
+        # guide. The model reads it before transcribing, so jargon and names
+        # from the guide come out right. AssemblyAI caps it at 1,500 words.
+        body["prompt"] = _clip_words(context, 1500)
+    if custom_spelling:
+        # A rule, not a hint: wherever the transcriber wrote one of the wrong
+        # spellings, the finished text gets the right one. See spellings.py.
+        body["custom_spelling"] = custom_spelling
+    if entity_detection:
+        # Names, roles and organizations with the time each was said. The
+        # naming pass uses the people it finds as candidates instead of
+        # hunting for introductions in raw text.
+        body["entity_detection"] = True
     if keyterms:
         # Names the user gave: a nudge toward those spellings when the audio
         # is close, not a rule. Up to 200 phrases of at most six words.
@@ -101,7 +122,8 @@ def wait(transcript_id: str, poll: float = 5.0, timeout: float = 3 * 3600,
 
 
 def utterances_from(transcript: dict) -> list[dict]:
-    """Normalize to the small shape we store: speaker letter, text, start, end (ms)."""
+    """Normalize to the small shape we store: speaker letter, text, start, end
+    (ms), and how sure the transcriber was of the line."""
     out = []
     for u in transcript.get("utterances") or []:
         out.append({
@@ -109,8 +131,54 @@ def utterances_from(transcript: dict) -> list[dict]:
             "text": (u.get("text") or "").strip(),
             "start": u.get("start"),
             "end": u.get("end"),
+            "confidence": _round(u.get("confidence")),
         })
     if not out and transcript.get("text"):
         out.append({"speaker": "A", "text": transcript["text"], "start": 0,
-                    "end": transcript.get("audio_duration", 0) * 1000})
+                    "end": transcript.get("audio_duration", 0) * 1000,
+                    "confidence": _round(transcript.get("confidence"))})
+    return out
+
+
+def _round(x, places: int = 3):
+    return round(x, places) if isinstance(x, (int, float)) else None
+
+
+def words_from(transcript: dict) -> list[dict]:
+    """Every word with its own timing and confidence, flat and in order.
+
+    This comes back with the transcript at no extra cost and is what makes an
+    exact split possible: when a line holds two people, the second person's
+    first word carries the real timestamp. Kept in its own file next to
+    meeting.json because it is several times the size of the transcript
+    (179 KB against 42 KB on a 22-minute meeting).
+
+    Short keys on purpose: t(ext), s(tart), e(nd), c(onfidence).
+    """
+    out = []
+    utterances = transcript.get("utterances") or []
+    source = ([w for u in utterances for w in (u.get("words") or [])]
+              or transcript.get("words") or [])
+    for w in source:
+        text = (w.get("text") or "").strip()
+        if not text:
+            continue
+        out.append({"t": text, "s": w.get("start"), "e": w.get("end"),
+                    "c": _round(w.get("confidence"))})
+    return out
+
+
+def people_from(transcript: dict) -> list[dict]:
+    """Person names (and the roles and organizations around them) that entity
+    detection heard, each with the time it was said. Candidates for the naming
+    pass, not answers: the same person may appear several times and a name
+    said in passing belongs to nobody in the room."""
+    keep = {"person_name", "occupation", "organization"}
+    out = []
+    for e in transcript.get("entities") or []:
+        kind = e.get("entity_type")
+        text = (e.get("text") or "").strip()
+        if kind not in keep or not text:
+            continue
+        out.append({"kind": kind, "text": text, "start": e.get("start")})
     return out

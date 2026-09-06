@@ -59,6 +59,33 @@ Fixing speakers from the command line:
     python transcribe.py reassign budget-kickoff 42 A # one line went to the wrong person
     python transcribe.py export budget-kickoff --format docx
 
+## Names that keep coming out wrong
+
+Some names the transcriber gets wrong every time, and telling it who was in
+the room isn't enough. `spellings.txt` in this folder fixes those for good:
+wherever the transcriber writes one of the wrong spellings, the finished
+transcript gets the right one. Start one and check it with:
+
+    python transcribe.py spellings --create   # writes a starter file
+    python transcribe.py spellings            # shows what it will correct
+
+The format is one corrected word per line, then what the transcriber hears
+instead:
+
+    Zubo: Zuba, Suber, Zooba
+    Matlack: Matlock, Mat Lack
+
+The word before the colon has to be a single word, so a full name goes in as
+one line per word — `Vera: Verra` and `Zubo: Zuba`, not `Vera Zubo: ...`.
+Each wrong spelling after the colon may be up to five words, which is how
+`Mat Lack` becomes `Matlack`. Matching ignores case; the replacement keeps
+the capitals you typed. `python transcribe.py spellings` names any line it
+can't use and why, and a bad line is skipped rather than stopping anything.
+
+The file is yours and stays out of git (it lists real people). It applies to
+every meeting from the next transcription on; re-run a meeting with
+`python transcribe.py retry <id>` to apply it to one already done.
+
 ## Summaries that follow an interview guide
 
 Interviews that follow a script can be turned into an organized summary:
@@ -109,15 +136,30 @@ and reassign or split it by hand.
 1. You say who was there and how many spoke (optional, either place).
 2. AssemblyAI transcribes and separates the voices. It gets the head count
    as an exact speaker count and the names as spelling hints, a nudge
-   toward "Alicia" over "Lucia" when the audio is close, not a rule.
+   toward "Alicia" over "Lucia" when the audio is close, not a rule. It is
+   also told what the meeting is: the title, who was there and the
+   questions in the interview guide, so a programme name or bit of jargon
+   comes out right the first time. Anything in `spellings.txt` is applied
+   as a rule to the finished text.
    `AAI_ADVANCED_DIARIZATION=1` in `.env` switches on AssemblyAI's
    experimental diarization, which is meant for many speakers or rough
    audio and costs a few cents more per hour; it helps most when people
    introduce themselves in quick succession.
+   Every word comes back with its own timing and a score for how sure the
+   transcriber was, kept alongside the transcript in `words.json`. That is
+   what lets a merged line be split at the exact moment the second person
+   starts.
 3. Claude reads the transcript and works out who each voice is, citing the
    lines that support each guess and flagging lines that look like two
-   people run together.
-4. Claude reads it once more as a reviewer and proposes concrete fixes:
+   people run together. It gets a head start from the names, roles and
+   organizations AssemblyAI itself picked out while listening, each with
+   the time it was said (`AAI_ENTITY_DETECTION=0` in `.env` turns that off
+   to save a little per hour).
+4. Claude reads it once more as a reviewer and proposes concrete fixes. It
+   is handed a list of names that appear in two spellings in the same
+   transcript ("Jeanne" and "Jeannie"), which is what finds a misheard name
+   — the transcriber's own confidence score does not, since it stays high on
+   names it got wrong. The fixes are:
    a line given to the wrong voice, a merged line to split at a given
    phrase, a misheard name to replace. Nothing is changed by itself. The
    proposals sit under **Suggested fixes** in the speaker panel with Apply
@@ -205,12 +247,18 @@ viewer's source is in `site/`; it is copied in on every publish.
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`
 (the Claude name-guessing pass), `summarize.py` (the Claude summary pass,
-driven by `guides/`), `store.py` (meeting.json read/write and speaker edits),
+driven by `guides/`), `spellings.py` (`spellings.txt`, names to always spell
+one way), `store.py` (meeting.json read/write and speaker edits),
 `export.py`, `publish.py` (the encrypted static site and its git push), and
 `pipeline.py` (file → transcript, batch, watch). `site/` is the viewer that
 gets published.
 `transcribe.py` and `serve.py` are thin wrappers over it. Deleting
 `serve.py`, `templates/` and `static/` leaves a working CLI tool.
+
+A meeting folder holds `meeting.json` (the source of truth), the audio, the
+exports, and `words.json`, the per-word timings (several times the size of
+`meeting.json`). Only splitting a line and the review pass read it; deleting
+it costs nothing but the exact split point, which falls back to an estimate.
 
 Costs: AssemblyAI bills per audio hour; each Claude pass sends the transcript
 text once per meeting. Both the name-guessing pass and the summaries use

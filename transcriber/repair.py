@@ -15,6 +15,7 @@ They live in meeting.json under "repairs" with a status of proposed,
 applied or rejected."""
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -108,6 +109,9 @@ def propose(m: dict) -> dict:
     if merged:
         parts.append("Lines the naming pass thought hold two people:\n"
                      + "\n".join(f"- #{x.get('line')}: {x.get('note')}" for x in merged))
+    doubts = name_doubts(m["id"], m)
+    if doubts:
+        parts.append(doubts)
     parts.append("Transcript:\n\n" + naming._render(m["utterances"]))
     request = dict(model=model, max_tokens=16000, system=SYSTEM,
                    messages=[{"role": "user", "content": "\n\n".join(parts)}],
@@ -189,6 +193,90 @@ def describe(m: dict, r: dict) -> str:
     return r["kind"]
 
 
+def _norm(word: str) -> str:
+    return re.sub(r"[^\w']", "", word).lower()
+
+
+def split_time(words: list[dict], u: dict, at: str, match_words: int = 4):
+    """When the second person in a merged line starts, to the millisecond.
+
+    `at` is the text the second person begins with. Find that run of words
+    among the words the transcriber timed inside this line, and the first of
+    them carries the real timestamp — no guessing from how long the sentence
+    looks. Returns None when there are no word timings to work from, or when
+    the phrase can't be located, and the caller estimates instead."""
+    window = store.words_between(words, u.get("start"), u.get("end"))
+    wanted = [w for w in (_norm(x) for x in at.split()) if w][:match_words]
+    if not window or not wanted:
+        return None
+    have = [_norm(w.get("t") or "") for w in window]
+    for i in range(len(have) - len(wanted) + 1):
+        if have[i:i + len(wanted)] == wanted:
+            start = window[i].get("s")
+            return start if isinstance(start, (int, float)) else None
+    return None
+
+
+# Words that open a sentence are capitalised whatever they are, so they crowd
+# out the real names. This is the short list that showed up as noise.
+_NOT_A_NAME = {
+    "the", "then", "this", "that", "these", "those", "and", "but", "for", "you",
+    "your", "yeah", "okay", "our", "are", "have", "haven", "has", "just", "was",
+    "were", "what", "when", "where", "which", "with", "they", "their", "there",
+    "she", "all", "any", "anything", "not", "now", "one", "two", "very", "well",
+    "yes", "let", "lets", "make", "kind", "right", "see", "how", "why", "who",
+    "because", "definitely", "whatever", "assign", "meet", "quite", "program",
+}
+
+
+def name_doubts(mid: str, m: dict, ratio: float = 0.85, limit: int = 12) -> str:
+    """The same name written two ways in one transcript.
+
+    The first try here listed the words the transcriber scored lowest, on the
+    theory that a misheard name is one it was unsure of. On real transcripts
+    that is false: the median word scores 0.999 and the bottom of the range is
+    all short function words, while a name it got wrong ("Jeannie" for Jeanne)
+    comes back around 0.7 and confident. Two spellings of one name in the same
+    conversation is the signal that actually finds those, and it needs no
+    confidence at all — the word timings only supply a score per spelling to
+    help judge which one is right.
+    """
+    counts: dict[str, int] = {}
+    for u in m.get("utterances") or []:
+        for t in re.findall(r"\b[A-Z][\w']{2,}\b", u.get("text") or ""):
+            if t.lower() in _NOT_A_NAME or "'" in t:
+                continue
+            counts[t] = counts.get(t, 0) + 1
+    scores = _word_scores(store.load_words(mid))
+    names = sorted(counts)
+    rows = []
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if a.lower().rstrip("s") == b.lower().rstrip("s"):
+                continue          # a plural, not a second spelling
+            if difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() < ratio:
+                continue
+            rows.append(f"- “{a}” ({counts[a]}x{scores.get(a.lower(), '')}) and "
+                        f"“{b}” ({counts[b]}x{scores.get(b.lower(), '')})")
+    if not rows:
+        return ""
+    return ("These look like one name spelled two ways. Decide which is right "
+            "and propose a replace for the other, or leave both if they are "
+            "genuinely different words.\n" + "\n".join(rows[:limit]))
+
+
+def _word_scores(words: list[dict]) -> dict[str, str]:
+    """How sure the transcriber was of each spelling, averaged. Empty when the
+    meeting has no word timings."""
+    tally: dict[str, list[float]] = {}
+    for w in words or []:
+        t = re.sub(r"[^\w']", "", w.get("t") or "").lower()
+        c = w.get("c")
+        if t and isinstance(c, (int, float)):
+            tally.setdefault(t, []).append(c)
+    return {t: f", {int(100 * sum(v) / len(v))}% sure" for t, v in tally.items()}
+
+
 def _shift(m: dict, after: int, by: int = 1) -> None:
     """A split inserted a line; every later index in the bookkeeping moves."""
     for it in (m.get("repairs") or {}).get("items", []):
@@ -224,8 +312,11 @@ def apply(mid: str, rid: int) -> dict:
         first, second = u["text"][:pos].rstrip(), u["text"][pos:].strip()
         label = r.get("second") or (_new_label(m, r["second_name"]) if r.get("second_name") else u["speaker"])
         start, end = u.get("start"), u.get("end")
-        cut = None
-        if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
+        cut = split_time(store.load_words(mid), u, r["at"])
+        if cut is None and isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
+            # No word timings on this meeting (transcribed before we kept them,
+            # or words.json is gone): fall back to guessing the moment from how
+            # far into the line the second person starts.
             cut = start + (end - start) * (len(first) / max(1, len(u["text"])))
         u["text"] = first
         if cut is not None:

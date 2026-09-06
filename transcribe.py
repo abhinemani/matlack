@@ -18,6 +18,7 @@
   python transcribe.py summarize <id> --guide other-guide
   python transcribe.py export <id> --summary --format docx
   python transcribe.py guides                   # list interview guides
+  python transcribe.py spellings                # check spellings.txt (names to always spell one way)
   python transcribe.py repairs <id>             # fixes Claude suggested; --apply all, --apply 3 7, --reject 2, --again
   python transcribe.py retry <id>
   python transcribe.py publish <id>             # approve a meeting and push the site
@@ -34,7 +35,7 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from transcriber import export, pipeline, publish, repair, store, summarize  # noqa: E402
+from transcriber import export, pipeline, publish, repair, spellings, store, summarize  # noqa: E402
 
 
 def _interactive(a) -> bool:
@@ -214,6 +215,32 @@ def cmd_guides(a):
         print(f"{g['id']:30} {g['title']}  ({g['sections']} sections)")
 
 
+def cmd_spellings(a):
+    """Show what spellings.txt will do to the next transcript, and say plainly
+    what is wrong with any line it can't use."""
+    path = spellings.SPELLINGS_FILE
+    if not path.is_file():
+        if a.create:
+            path.write_text(spellings.EXAMPLE)
+            print(f"wrote {path} — open it and add your names, one per line.")
+            return
+        print(f"No {path.name} yet, so nothing is being corrected.")
+        print(f"Make one with:  python transcribe.py spellings --create")
+        return
+    entries, problems = spellings.load()
+    if entries:
+        print(f"{path} corrects {len(entries)} word{'s' if len(entries) != 1 else ''}:")
+        for e in entries:
+            print(f"  {e['to']:20} <- {', '.join(e['from'])}")
+    else:
+        print(f"{path} has nothing usable in it yet.")
+    if problems:
+        print()
+        print(f"{len(problems)} line{'s' if len(problems) != 1 else ''} skipped:")
+        for why in problems:
+            print(f"  {why}")
+
+
 def cmd_repairs(a):
     """Suggested fixes from the review pass: list them, apply some or all,
     dismiss some, or ask for a fresh set."""
@@ -364,6 +391,10 @@ def main(argv=None):
     s.set_defaults(fn=cmd_summarize)
 
     sub.add_parser("guides", help="list interview guides").set_defaults(fn=cmd_guides)
+
+    s = sub.add_parser("spellings", help="check spellings.txt: names the transcriber should always spell one way")
+    s.add_argument("--create", action="store_true", help="write a starter spellings.txt if there isn't one")
+    s.set_defaults(fn=cmd_spellings)
 
     s = sub.add_parser("repairs", help="fixes Claude suggests after transcription; apply or dismiss them")
     s.add_argument("id")

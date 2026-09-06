@@ -40,6 +40,10 @@ transcripts. Read this before doing anything.
   (follows `guides/efficiency-review.md`; result in meeting.json under
   `summary` plus `<id>-summary.md`; `--guide <name>` picks another guide)
 - "Word version of the summary" → `python transcribe.py export <id> --summary --format docx`
+- "It keeps spelling <name> wrong" → add a line to `spellings.txt`
+  (`Zubo: Zuba, Suber` — corrected word before the colon, must be one word;
+  `python transcribe.py spellings` checks the file, `--create` starts one).
+  Applies from the next transcription; `retry <id>` re-does an old one.
 - "Add a question to the interview guide" → edit `guides/<name>.md`
   (`## Section` = one question, first line is the question, `- ` = probes),
   then re-run `summarize`
@@ -71,4 +75,13 @@ where the last session left off, read it first.
 - `data/published/` is a git checkout the publish step manages; don't edit it.
 - Don't delete anything under `data/meetings/` without asking.
 - Speaker labels are single capital letters (A, B, C…). Names are free text.
+- `data/meetings/<id>/words.json` holds per-word timings and confidence from
+  AssemblyAI. Only splitting a line and the review pass read it; everything
+  must keep working when it is missing (old meetings have none).
+- Don't use word confidence to find misheard names: measured on real
+  transcripts the median word is 0.999 and names it got wrong sit near 0.7
+  while ordinary function words fill the bottom. `repair.name_doubts` finds
+  them by spotting one name spelled two ways instead.
+- `spellings.txt` is local and gitignored, like `.env`. A malformed line is
+  reported and skipped, never fatal.
 - Summaries are editable in the web page; regenerating replaces those edits.

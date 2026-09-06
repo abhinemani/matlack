@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import aai, export, naming, repair, store
+from . import aai, export, naming, repair, spellings, store
 
 _in_flight: set[str] = set()
 _lock = threading.Lock()
@@ -16,6 +16,38 @@ _lock = threading.Lock()
 
 def log(msg: str) -> None:
     print(time.strftime("%H:%M:%S"), msg, flush=True)
+
+
+def audio_context(m: dict) -> str:
+    """What the transcriber is told about the meeting before it starts.
+
+    The interview guide is the useful part: knowing the subject up front is
+    what makes an unfamiliar term or a programme name come out right the
+    first time. The title and the people ride along because they cost
+    nothing. Set AAI_CONTEXT=0 to send none of it, AAI_CONTEXT_GUIDE to use
+    a guide other than the default one."""
+    if os.environ.get("AAI_CONTEXT") == "0":
+        return ""
+    parts = []
+    title = (m.get("title") or "").strip()
+    if title:
+        parts.append(f"This is a recording of: {title}")
+    if m.get("people"):
+        parts.append("People in the room (may be partial): "
+                     + "; ".join(m["people"]))
+    try:
+        from . import summarize
+        guide = summarize.load_guide(os.environ.get("AAI_CONTEXT_GUIDE") or None)
+    except Exception:
+        guide = None                      # no guides folder is fine
+    if guide and guide.get("sections"):
+        lines = [f"It follows an interview guide, {guide['title']}, covering:"]
+        if guide.get("intro"):
+            lines.append(guide["intro"])
+        for sec in guide["sections"]:
+            lines.append(f"- {sec['title']}: {sec['question']}")
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
 
 
 def process_meeting(mid: str) -> dict:
@@ -35,21 +67,30 @@ def process_meeting(mid: str) -> dict:
         log(f"[{mid}] uploading {audio.name}")
         url = aai.upload(audio)
 
+        fixed, problems = spellings.load()
+        for why in problems:
+            log(f"[{mid}] spellings.txt: {why}")
+
         store.set_status(mid, "transcribing")
         tid = aai.submit(url, speech_model=os.environ.get("AAI_SPEECH_MODEL") or None,
                          language_code=os.environ.get("AAI_LANGUAGE") or None,
                          speakers_expected=m.get("speakers_expected"),
                          keyterms=store.people_names(m.get("people")),
-                         advanced_diarization=os.environ.get("AAI_ADVANCED_DIARIZATION") == "1")
+                         advanced_diarization=os.environ.get("AAI_ADVANCED_DIARIZATION") == "1",
+                         context=audio_context(m), custom_spelling=fixed,
+                         entity_detection=os.environ.get("AAI_ENTITY_DETECTION") != "0")
         store.set_status(mid, "transcribing", aai_id=tid)
         log(f"[{mid}] transcribing ({tid})")
         t = aai.wait(tid)
 
         utterances = aai.utterances_from(t)
         labels = sorted({u["speaker"] for u in utterances})
+        store.save_words(mid, aai.words_from(t))
+        heard = aai.people_from(t)
         m = store.load(mid)
         m["utterances"] = utterances
         m["duration_ms"] = (t.get("audio_duration") or 0) * 1000
+        m["heard_names"] = heard
         m["speakers"] = {l: {"name": "", "guess": None, "confidence": None,
                              "evidence": None, "confirmed": False} for l in labels}
         m["status"] = "naming"
@@ -59,7 +100,7 @@ def process_meeting(mid: str) -> dict:
         try:
             guesses = naming.guess_names(utterances, people=m.get("people"),
                                          expected=m.get("speakers_expected"),
-                                         model=store.model_id(m))
+                                         model=store.model_id(m), heard=heard)
         except Exception as e:  # naming is best-effort
             log(f"[{mid}] name guessing failed: {e}")
             guesses = {}
@@ -95,7 +136,8 @@ def reguess(mid: str) -> dict:
     known = {l: sp["name"] for l, sp in m["speakers"].items()
              if sp.get("confirmed") and sp.get("name")}
     guesses = naming.guess_names(m["utterances"], people=m.get("people"), known=known,
-                                 expected=m.get("speakers_expected"), model=store.model_id(m))
+                                 expected=m.get("speakers_expected"), model=store.model_id(m),
+                                 heard=m.get("heard_names"))
     m = store.load(mid)
     m["naming"] = guesses.pop("_notes", None)
     for label, g in guesses.items():

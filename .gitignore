@@ -1,4 +1,5 @@
 .env
+spellings.txt
 data/
 __pycache__/
 *.pyc
