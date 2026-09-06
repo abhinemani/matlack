@@ -83,5 +83,9 @@ where the last session left off, read it first.
   while ordinary function words fill the bottom. `repair.name_doubts` finds
   them by spotting one name spelled two ways instead.
 - `spellings.txt` is local and gitignored, like `.env`. A malformed line is
-  reported and skipped, never fatal.
+  reported and skipped, never fatal. It is not a roster: it never reaches the
+  naming pass, and speakers are always worked out from the meeting's own
+  transcript. Adding a common first name to it is dangerous — the rule hits
+  every later meeting whether that person is in it or not, and AssemblyAI
+  applies it upstream, so a wrong replacement leaves no trace to find.
 - Summaries are editable in the web page; regenerating replaces those edits.

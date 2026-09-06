@@ -89,6 +89,38 @@ def parse(text: str) -> tuple[list[dict], list[str]]:
     return entries, problems
 
 
+WORDLIST = Path("/usr/share/dict/words")
+
+
+def _dictionary() -> set[str]:
+    try:
+        return {w.strip().lower() for w in WORDLIST.read_text().splitlines() if w.strip()}
+    except OSError:
+        return set()
+
+
+def risky(entries: list[dict]) -> list[str]:
+    """Corrections that will also hit words meaning something else.
+
+    Every rule here applies to every future meeting, including ones where
+    none of these people are in the room -- and it is applied before we ever
+    see the text, so a wrong replacement leaves no trace anywhere: not in the
+    transcript, not in words.json, not in the confidence scores. A rule whose
+    wrong spelling is an ordinary word or somebody else's name is therefore
+    worth a second look, because nothing downstream will catch it.
+    """
+    words = _dictionary()
+    if not words:
+        return []
+    out = []
+    for e in entries:
+        for w in e["from"]:
+            if w.lower() in words and w.lower() != e["to"].lower():
+                out.append(f"“{w}” is an ordinary word or a name in its own right, and every "
+                           f"one becomes “{e['to']}” — including a different person's.")
+    return out
+
+
 def load(path: Path | None = None) -> tuple[list[dict], list[str]]:
     """Read spellings.txt. Missing file is normal and means no corrections."""
     p = Path(path or SPELLINGS_FILE)

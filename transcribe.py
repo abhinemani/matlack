@@ -239,6 +239,18 @@ def cmd_spellings(a):
         print(f"{len(problems)} line{'s' if len(problems) != 1 else ''} skipped:")
         for why in problems:
             print(f"  {why}")
+    care = spellings.risky(entries)
+    if care:
+        print()
+        print("Worth a second look:")
+        for why in care:
+            print(f"  {why}")
+    if entries:
+        print()
+        print("These apply to every meeting from now on, whether or not the people")
+        print("involved are in it, and the transcriber applies them before we see the")
+        print("text — so a wrong replacement leaves no trace. Keep the list to names")
+        print("you have actually seen it get wrong.")
 
 
 def cmd_repairs(a):

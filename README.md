@@ -82,6 +82,18 @@ Each wrong spelling after the colon may be up to five words, which is how
 the capitals you typed. `python transcribe.py spellings` names any line it
 can't use and why, and a bad line is skipped rather than stopping anything.
 
+Keep the list to names you have actually watched it get wrong. A rule here
+applies to every later meeting whether or not that person is in it, and
+AssemblyAI applies it before the transcript reaches us — so if a different
+Abby ever turns up and the file says `Abhi: Abby`, she is silently renamed
+and nothing shows it: not the transcript, not `words.json`, not the
+confidence scores. `python transcribe.py spellings` marks the entries whose
+wrong spelling is an ordinary word or a name in its own right.
+
+None of this affects working out who is speaking. The names in this file are
+not a roster: every meeting's speakers are identified from that meeting's
+own transcript, and a meeting of complete strangers works the same way.
+
 The file is yours and stays out of git (it lists real people). It applies to
 every meeting from the next transcription on; re-run a meeting with
 `python transcribe.py retry <id>` to apply it to one already done.
