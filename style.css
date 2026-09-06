@@ -417,7 +417,8 @@ main:has(.player) .key { max-height: calc(100vh - 156px); }  /* leave room for t
 .brand-bar .nav a svg { width: 13px; height: 13px; color: var(--muted); }
 .brand-bar .nav a:hover svg { color: var(--action); }
 .brand-bar .nav .btn { font-size: 13.5px; padding: 5px 11px; border-radius: 7px; margin-left: 6px; }
-.brand-bar .nav .saved { margin-left: 6px; white-space: nowrap; color: var(--good); font-weight: 500; }
+.brand-bar .nav { min-width: 0; }
+.brand-bar .nav .saved { margin-left: 6px; white-space: nowrap; color: var(--good); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 36vw; }
 .pub-off { color: var(--faint); font-size: 12.5px; padding: 5px 10px; }
 @media (max-width: 480px) {
   .brand-bar .nav .saved, .pub-off { display: none; }
