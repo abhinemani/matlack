@@ -278,10 +278,29 @@ def _word_scores(words: list[dict]) -> dict[str, str]:
 
 
 def _shift(m: dict, after: int, by: int = 1) -> None:
-    """A split inserted a line; every later index in the bookkeeping moves."""
+    """A split inserted a line; every later index in the bookkeeping moves.
+
+    Repairs still pointing at the line that was split need care rather than a
+    shift. A line holding three turns (a question, its answer, the asker's
+    reaction) draws one proposal per cut, and applying the first moves the
+    later cuts' text into the newly inserted line. Following the text keeps
+    those usable; without this they failed validation as "split point not
+    found", which quietly dropped a ninth of everything proposed.
+    """
+    utts = m.get("utterances") or []
     for it in (m.get("repairs") or {}).get("items", []):
-        if it.get("status") == "proposed" and isinstance(it.get("line"), int) and it["line"] > after:
+        if it.get("status") != "proposed" or not isinstance(it.get("line"), int):
+            continue
+        if it["line"] > after:
             it["line"] += by
+        elif it["line"] == after:
+            needle = it.get("at") if it.get("kind") == "split" else (
+                it.get("find") if it.get("kind") == "replace" else None)
+            if not needle or after + by >= len(utts):
+                continue          # a reassign has no text to follow
+            if needle not in utts[after].get("text", "") and \
+                    needle in utts[after + by].get("text", ""):
+                it["line"] = after + by
     for x in (m.get("naming") or {}).get("merged_lines") or []:
         if isinstance(x.get("line"), int) and x["line"] > after:
             x["line"] += by
