@@ -119,6 +119,16 @@ select:hover { border-color: var(--action); }
 .drop p { margin: 0; font-weight: 500; }
 .drop small { color: var(--muted); font-weight: 400; display: block; margin-top: 4px; }
 .drop .who-row { flex: 1 1 100%; order: 3; display: flex; gap: 18px; flex-wrap: wrap; border-top: 1px dashed var(--rule-soft); padding-top: 16px; margin-top: 2px; }
+/* Files picked but not yet sent: listed with what they'll carry, then Start. */
+.drop .chosen { flex: 1 1 100%; order: 4; border-top: 1px dashed var(--rule-soft); padding-top: 14px; }
+.chosen-files { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.chosen-file { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.chosen-file svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.chosen-file b { font-weight: 500; overflow-wrap: anywhere; }
+.chosen-file span { color: var(--faint); font-size: 12.5px; }
+.chosen-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chosen-with { color: var(--muted); font-size: 13px; }
+.chosen-actions .quiet { margin-left: auto; }
 .who-field { display: block; flex: 1 1 320px; min-width: 0; }
 .who-field.count-field { flex: 0 1 180px; }
 .who-field.model-field { flex: 0 1 220px; }

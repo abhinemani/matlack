@@ -89,7 +89,10 @@ When a transcript is messy enough that command-line fixes get tedious:
     python serve.py            # http://127.0.0.1:8000
     python serve.py --watch    # also watches the inbox while it runs
 
-Upload files by dragging them onto the page, then open a meeting: rename or
+Drag files onto the page or choose them; they're listed with the names,
+head count and model they'll carry, and nothing is sent until you press
+Start. While a meeting is transcribing, its row shows what it was given.
+Then open a meeting: rename or
 accept speakers on the left, change any single line's speaker with the
 dropdown on the right (pick "Someone else…" there to add a person the first
 pass never separated out), click a timestamp to hear that moment, click

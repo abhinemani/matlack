@@ -48,7 +48,7 @@
       <label class="who-field">
         <span>Who was there? <em>Optional</em></span>
         <input type="text" name="people" id="people" placeholder="Names you already know, comma-separated. Roles in parentheses." autocomplete="off">
-        <small>Fill in before choosing files. Partial is fine; roles in parentheses.</small>
+        <small>Partial is fine; roles in parentheses. Goes with the files you start next.</small>
       </label>
       <label class="who-field count-field">
         <span>How many spoke? <em>Optional</em></span>
@@ -63,8 +63,16 @@
     </div>
     <div>
       <input type="file" name="files" id="files" multiple accept="audio/*,video/mp4,.m4a,.mp3,.wav" hidden>
-      <button type="button" class="primary" onclick="document.getElementById('files').click()">
+      <button type="button" class="primary" id="chooseBtn" onclick="document.getElementById('files').click()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Choose files</button>
+    </div>
+    <div class="chosen" id="chosen" hidden>
+      <div class="chosen-files" id="chosenFiles"></div>
+      <div class="chosen-actions">
+        <button type="button" class="primary" id="startBtn" onclick="startUpload()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg><span>Start transcribing</span></button>
+        <span class="chosen-with" id="chosenWith"></span>
+        <button type="button" class="quiet" onclick="clearChosen()">Choose different files</button>
+      </div>
     </div>
   </form>
   <p class="watch">
@@ -118,7 +126,7 @@
         </div>
         <div class="cell who">
           {% if names %}{% for n in names[:4] %}<span class="n">{{ n }}</span>{% endfor %}{% if names|length > 4 %} <span class="more">+{{ names|length - 4 }} more</span>{% endif %}
-          {% elif m.people %}<span class="more" title="Names given before transcription">{{ m.people|join(', ') }}</span>
+          {% elif m.status != 'ready' %}<span class="more" title="What this meeting was given before transcription">{{ (m.people or ['no names given'])|join(', ') }}{% if m.speakers_expected %} · {{ m.speakers_expected }} speaker{{ '' if m.speakers_expected == 1 else 's' }}{% endif %} · {{ store.MODELS[store.model_key(m.model) or store.DEFAULT_MODEL].label }}</span>
           {% else %}<span class="more">—</span>{% endif %}
         </div>
         <div class="cell len">{{ store.fmt_ts(m.duration_ms) if m.duration_ms else "—" }}</div>
@@ -143,10 +151,38 @@
 <script>
 const form = document.getElementById('upload');
 const input = document.getElementById('files');
-input.addEventListener('change', () => { if (input.files.length) form.submit(); });
+const mb = n => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0) + ' MB';
+// Choosing files doesn't send them. They're listed with the details they'll
+// carry, and nothing happens until Start.
+function showChosen() {
+  const files = [...input.files];
+  const box = document.getElementById('chosen');
+  if (!files.length) { box.hidden = true; return; }
+  document.getElementById('chosenFiles').innerHTML = files.map(f =>
+    `<div class="chosen-file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg><b>${esc(f.name)}</b><span>${mb(f.size)}</span></div>`).join('');
+  box.hidden = false; describeChosen();
+  box.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+}
+function describeChosen() {
+  const people = document.getElementById('people').value.trim();
+  const count = document.getElementById('speakers_expected').value.trim();
+  const model = document.getElementById('model');
+  const bits = [model.options[model.selectedIndex].text,
+                people ? 'names: ' + people : 'no names given',
+                count ? count + ' speaker' + (count === '1' ? '' : 's') : ''].filter(Boolean);
+  document.getElementById('chosenWith').textContent = 'with ' + bits.join(' · ');
+}
+function clearChosen() { input.value = ''; showChosen(); }
+function startUpload() {
+  const b = document.getElementById('startBtn'); b.disabled = true; b.querySelector('span').textContent = 'Uploading…';
+  form.submit();
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+input.addEventListener('change', showChosen);
+['people', 'speakers_expected', 'model'].forEach(id => document.getElementById(id).addEventListener('input', describeChosen));
 ['dragenter','dragover'].forEach(e => form.addEventListener(e, ev => { ev.preventDefault(); form.classList.add('over'); }));
 ['dragleave','drop'].forEach(e => form.addEventListener(e, ev => { ev.preventDefault(); form.classList.remove('over'); }));
-form.addEventListener('drop', ev => { input.files = ev.dataTransfer.files; form.submit(); });
+form.addEventListener('drop', ev => { input.files = ev.dataTransfer.files; showChosen(); });
 
 async function retry(id) { await fetch(`/api/meetings/${id}/retry`, {method:'POST'}); location.reload(); }
 async function rename(id, title) {
