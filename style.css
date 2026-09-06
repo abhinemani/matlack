@@ -165,7 +165,10 @@ select:hover { border-color: var(--action); }
 
 /* ---- transcript page ---- */
 .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 22px; }
-.key { position: sticky; top: 68px; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow-sm); max-height: calc(100vh - 84px); display: flex; flex-direction: column; }
+/* A <details> element: browsers box its content internally, so an inner
+   scroll area never gets a height to work with. The panel itself scrolls. */
+.key { position: sticky; top: 68px; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow-sm); max-height: calc(100vh - 84px); overflow: auto; overscroll-behavior: contain; }
+main:has(.player) .key { max-height: calc(100vh - 156px); }  /* leave room for the player bar */
 .key-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--rule-soft); display: flex; align-items: center; gap: 10px; list-style: none; cursor: pointer; user-select: none; }
 .key-head::-webkit-details-marker { display: none; }
 .key:not([open]) .key-head { border-bottom: 0; }
@@ -174,7 +177,7 @@ select:hover { border-color: var(--action); }
 .key[open] .key-head .chev { transform: rotate(180deg); }
 .key-head .prog { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .key-head .prog.done { color: var(--good); }
-.key-body { padding: 4px 18px 14px; overflow: auto; }
+.key-body { padding: 4px 18px 14px; }
 .key .hint { color: var(--muted); font-size: 13px; margin: 10px 0 4px; line-height: 1.45; }
 .sp { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 14px 0; border-top: 1px solid var(--rule-soft); }
 .sp:first-of-type { border-top: 0; }
