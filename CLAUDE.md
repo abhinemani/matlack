@@ -31,6 +31,10 @@ transcripts. Read this before doing anything.
 - "C and B are the same person" → `python transcribe.py merge <id> C B`
 - "Line 42 is actually Mark" → `python transcribe.py reassign <id> 42 A`
   (find the line number with `show <id> --full`)
+- "The transcript reads badly / clean it up" → `python transcribe.py clean <id>`
+  (fillers, false starts, punctuation; runs automatically after transcription.
+  Uses Fable 5.1, not Opus. `--undo` restores the recorded text, kept in each
+  utterance's `raw`.)
 - "What fixes did Claude suggest / apply them" → `python transcribe.py repairs <id>`
   (review-pass proposals: wrong speaker, merged line to split, misheard
   name; `--apply all` or `--apply 3 7`, `--reject 2`, `--again` for a fresh
@@ -89,3 +93,8 @@ where the last session left off, read it first.
   every later meeting whether that person is in it or not, and AssemblyAI
   applies it upstream, so a wrong replacement leaves no trace to find.
 - Summaries are editable in the web page; regenerating replaces those edits.
+- The cleanup pass may fix how a line reads, never what it says: no rewording,
+  no correcting someone's grammar or dialect, no touching names or numbers.
+  `cleanup.check` enforces that mechanically (no invented words, no losing
+  half the line) and a refused line stays exactly as recorded. It is the one
+  pass on Fable 5.1; everything else is Opus.

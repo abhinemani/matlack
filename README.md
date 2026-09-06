@@ -57,6 +57,8 @@ Fixing speakers from the command line:
     python transcribe.py confirm budget-kickoff       # accept all guesses
     python transcribe.py merge budget-kickoff C B     # diarization split one person in two
     python transcribe.py reassign budget-kickoff 42 A # one line went to the wrong person
+    python transcribe.py clean budget-kickoff         # tidy the text (runs automatically too)
+    python transcribe.py clean budget-kickoff --undo  # back to what was recorded
     python transcribe.py export budget-kickoff --format docx
 
 ## Names that keep coming out wrong
@@ -167,7 +169,21 @@ and reassign or split it by hand.
    organizations AssemblyAI itself picked out while listening, each with
    the time it was said (`AAI_ENTITY_DETECTION=0` in `.env` turns that off
    to save a little per hour).
-4. Claude reads it once more as a reviewer and proposes concrete fixes. It
+4. Claude tidies the text: filler words, false starts the speaker restarted
+   ("the little— the Livable Frederick Plan"), a repeated word, missing
+   sentence capitals. It does not reword anything, does not correct anyone's
+   grammar or dialect, and does not touch names or numbers. Every line it
+   changes keeps the original beside it, so
+
+       python transcribe.py clean budget-kickoff --undo
+
+   puts the whole transcript back to what the transcriber recorded. This is
+   the one pass that uses Claude Fable 5.1 rather than Opus (`CLEANUP_MODEL`
+   overrides it, `CLEANUP=0` skips the pass). Two mechanical guards sit
+   between the model and the transcript: a tidied line may not use a word
+   the original did not have, and may not lose half its length. A line
+   failing either is kept exactly as recorded and reported.
+5. Claude reads it once more as a reviewer and proposes concrete fixes. It
    is handed a list of names that appear in two spellings in the same
    transcript ("Jeanne" and "Jeannie"), which is what finds a misheard name
    — the transcriber's own confidence score does not, since it stays high on
@@ -259,8 +275,9 @@ viewer's source is in `site/`; it is copied in on every publish.
 
 `transcriber/` is the library: `aai.py` (AssemblyAI REST), `naming.py`
 (the Claude name-guessing pass), `summarize.py` (the Claude summary pass,
-driven by `guides/`), `spellings.py` (`spellings.txt`, names to always spell
-one way), `store.py` (meeting.json read/write and speaker edits),
+driven by `guides/`), `cleanup.py` (the Fable 5.1 text-tidying pass),
+`spellings.py` (`spellings.txt`, names to always spell one way), `store.py`
+(meeting.json read/write and speaker edits),
 `export.py`, `publish.py` (the encrypted static site and its git push), and
 `pipeline.py` (file → transcript, batch, watch). `site/` is the viewer that
 gets published.

@@ -19,6 +19,7 @@
   python transcribe.py export <id> --summary --format docx
   python transcribe.py guides                   # list interview guides
   python transcribe.py spellings                # check spellings.txt (names to always spell one way)
+  python transcribe.py clean <id>               # tidy the text (fillers, false starts); --undo puts it back
   python transcribe.py repairs <id>             # fixes Claude suggested; --apply all, --apply 3 7, --reject 2, --again
   python transcribe.py retry <id>
   python transcribe.py publish <id>             # approve a meeting and push the site
@@ -35,7 +36,7 @@ from pathlib import Path
 from transcriber import load_env
 load_env()
 
-from transcriber import export, pipeline, publish, repair, spellings, store, summarize  # noqa: E402
+from transcriber import cleanup, export, pipeline, publish, repair, spellings, store, summarize  # noqa: E402
 
 
 def _interactive(a) -> bool:
@@ -253,6 +254,27 @@ def cmd_spellings(a):
         print("you have actually seen it get wrong.")
 
 
+def cmd_clean(a):
+    """Tidy the transcript text, or put it back the way it was recorded."""
+    m = store.load(a.id)
+    if a.undo:
+        n = cleanup.undo(a.id)
+        export.write(store.load(a.id), "md")
+        print(f"restored {n} line{'s' if n != 1 else ''} to what the transcriber recorded")
+        return
+    if m["status"] != "ready":
+        sys.exit(f"{a.id} is not transcribed yet (status: {m['status']})")
+    print(f"Tidying with {cleanup.MODEL}…")
+    b = pipeline.tidy(a.id)
+    if b.get("status") == "error":
+        sys.exit(f"cleanup failed: {b.get('error')}")
+    print(f"tidied {b['changed']} of {b['lines']} lines"
+          + (f"; {b['refused']} left as recorded" if b.get("refused") else ""))
+    for why in b.get("notes") or []:
+        print(f"  {why}")
+    print(export.write(store.load(a.id), "md"))
+
+
 def cmd_repairs(a):
     """Suggested fixes from the review pass: list them, apply some or all,
     dismiss some, or ask for a fresh set."""
@@ -407,6 +429,11 @@ def main(argv=None):
     s = sub.add_parser("spellings", help="check spellings.txt: names the transcriber should always spell one way")
     s.add_argument("--create", action="store_true", help="write a starter spellings.txt if there isn't one")
     s.set_defaults(fn=cmd_spellings)
+
+    s = sub.add_parser("clean", help="tidy the text: fillers, false starts, punctuation")
+    s.add_argument("id")
+    s.add_argument("--undo", action="store_true", help="put every line back to what was recorded")
+    s.set_defaults(fn=cmd_clean)
 
     s = sub.add_parser("repairs", help="fixes Claude suggests after transcription; apply or dismiss them")
     s.add_argument("id")
