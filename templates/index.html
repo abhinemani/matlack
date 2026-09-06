@@ -168,9 +168,18 @@ async function doPublish() {
   const rep = await r.json();
   const n = rep.added.length + rep.updated.length + rep.removed.length;
   const msg = document.getElementById('pubMsg');
-  msg.textContent = rep.pushed ? `Pushed ${n} change${n === 1 ? '' : 's'}` : 'Site already up to date';
-  msg.classList.add('show');
-  setTimeout(() => location.reload(), 1200);
+  btn.disabled = false; label.textContent = 'Publish';
+  if (rep.pushed) {
+    msg.textContent = `Pushed ${n} change${n === 1 ? '' : 's'} · live in about a minute`;
+    msg.classList.add('show');
+    setTimeout(() => location.reload(), 5000);  // rows pick up their new state
+  } else {
+    // Nothing waiting. Say so and stay put; a reload here looked like nothing happened.
+    msg.textContent = 'Nothing to push · the site already matches';
+    msg.classList.add('show');
+    clearTimeout(window.__pubMsgTimer);
+    window.__pubMsgTimer = setTimeout(() => msg.classList.remove('show'), 7000);
+  }
 }
 
 // Relative "added" time under each title.
