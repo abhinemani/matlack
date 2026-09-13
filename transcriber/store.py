@@ -161,6 +161,12 @@ def list_meetings() -> list[dict]:
     return out
 
 
+def title_key(m: dict) -> str:
+    """Sort key for listing meetings A-Z. Falls back to the id for a meeting
+    that has no title yet, so a waiting file still lands somewhere sensible."""
+    return (m.get("title") or m.get("id") or "").casefold()
+
+
 def parse_people(text: str | list | None) -> list[str]:
     """Names the user typed, deduplicated. Free text splits on commas,
     semicolons and newlines; a list is taken item by item, so a role can ride

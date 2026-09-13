@@ -112,7 +112,7 @@ def _summary_job(mid: str, gid: str | None) -> None:
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "index.html", {
-        "meetings": [_public(m) for m in store.list_meetings()],
+        "meetings": [_public(m) for m in sorted(store.list_meetings(), key=store.title_key)],
         "watching": _watch_thread is not None,
         "inbox": str(store.INBOX_DIR),
         "publishing": _publish_status(),
