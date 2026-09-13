@@ -400,8 +400,7 @@ def publish(push: bool = True, log=print) -> dict:
                 stale.unlink()
         if not any((d / "a").iterdir()):
             (d / "a").rmdir()
-    index = {"meetings": [entry(m) for m in
-                          sorted(meetings, key=lambda x: x.get("created") or 0, reverse=True)]}
+    index = {"meetings": [entry(m) for m in sorted(meetings, key=store.title_key)]}
     ih = fingerprint(index)
     if old_index is not None and old_site.get("index") == ih:
         (d / "index.json").write_text(old_index)
