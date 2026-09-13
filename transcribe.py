@@ -268,6 +268,8 @@ def cmd_clean(a):
     b = pipeline.tidy(a.id)
     if b.get("status") == "error":
         sys.exit(f"cleanup failed: {b.get('error')}")
+    if b.get("status") != "done":
+        sys.exit("cleanup is switched off (CLEANUP=0 in the environment)")
     print(f"tidied {b['changed']} of {b['lines']} lines"
           + (f"; {b['refused']} left as recorded" if b.get("refused") else ""))
     for why in b.get("notes") or []:
@@ -284,6 +286,9 @@ def cmd_repairs(a):
             sys.exit(f"{a.id} is not transcribed yet (status: {m['status']})")
         print("Reviewing the transcript for fixes…")
         m = pipeline.suggest_repairs(a.id)
+        r = m.get("repairs") or {}
+        if r.get("status") == "error":
+            sys.exit(f"review pass failed: {r.get('error')}")
     if a.apply:
         ids = None if "all" in a.apply else [int(x) for x in a.apply]
         if ids is None:

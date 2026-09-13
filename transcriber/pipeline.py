@@ -157,17 +157,22 @@ def tidy(mid: str) -> dict:
     """The cleanup pass: fillers, false starts and punctuation, with the
     verbatim text kept beside every line it touches. Best effort, like the
     naming pass -- a failure leaves the transcript exactly as recorded.
-    Set CLEANUP=0 to skip it."""
+    Set CLEANUP=0 to skip it.
+
+    Returns the cleanup block -- never the meeting -- so the caller can read
+    its "status" ("done", "error" or "skipped") and say what happened."""
     if os.environ.get("CLEANUP") == "0":
-        return {}
+        return {"status": "skipped"}
     store.modify(mid, lambda m: m.__setitem__(
         "cleanup", {"status": "running", "created": time.time()}))
     try:
         block = cleanup.run(mid)
     except Exception as e:
         log(f"[{mid}] cleanup failed: {e}")
-        return store.modify(mid, lambda m: m.__setitem__(
-            "cleanup", {"status": "error", "error": str(e), "created": time.time()}))
+        block = {"status": "error", "error": str(e), "created": time.time()}
+        # store.modify hands back the meeting; the caller wants the block.
+        store.modify(mid, lambda m: m.__setitem__("cleanup", block))
+        return block
     log(f"[{mid}] tidied {block['changed']} of {block['lines']} lines"
         + (f", {block['refused']} left as recorded" if block["refused"] else ""))
     return block
@@ -175,7 +180,10 @@ def tidy(mid: str) -> dict:
 
 def suggest_repairs(mid: str) -> dict:
     """The review pass: Claude proposes line and name fixes for a person to
-    apply. Best effort; a failure leaves the transcript as it is."""
+    apply. Best effort; a failure leaves the transcript as it is.
+
+    Returns the meeting -- both on success and on failure -- so the caller
+    looks under its "repairs" block to see how the pass went."""
     # Marked running first, so a restart knows to pick this up again.
     m = store.modify(mid, lambda m: m.__setitem__(
         "repairs", {"status": "running", "created": time.time(), "items": []}))
