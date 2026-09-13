@@ -114,7 +114,7 @@ async function viewList() {
       <div class="h1-row"><h1>Meetings</h1>${ms.length ? `<span class="count">${ms.length}</span>` : ''}</div>
       <p class="lede">Interview transcripts and summaries.</p>
     </div></header>
-    <main class="wrap">${ms.length ? `<div class="list-head"><h2>Published</h2><span class="sub">Newest first</span></div>
+    <main class="wrap">${ms.length ? `<div class="list-head"><h2>Published</h2><span class="sub">A-Z</span></div>
       <div class="list"><div class="cols" aria-hidden="true"><span>Meeting</span><span>Speakers</span><span>Length</span><span>Status</span><span></span></div>${rows}</div>`
       : '<p class="empty"><b>Nothing here yet.</b></p>'}
       <p class="published-note">${index.generated ? `Updated ${esc(new Date(index.generated * 1000).toLocaleString())}. ` : ''}${site.enc && savedPass() ? '<a href="#" id="forget">Forget the passphrase on this device</a>' : ''}</p>
