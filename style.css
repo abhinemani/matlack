@@ -180,7 +180,13 @@ input[type=number]:focus { border-color: var(--action); box-shadow: 0 0 0 3px va
 .list-head .sub { color: var(--muted); font-size: 13px; }
 
 .list { border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow-sm); background: var(--paper); overflow: hidden; }
-.list .cols, .list .row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) 72px 128px auto; gap: 16px; align-items: center; padding: 14px 18px; }
+/* The header and each row are separate grid containers, so every column has
+   to resolve to the same width in both or the labels drift off their data.
+   The last column was `auto`: nothing in the header (its span is empty) and
+   the width of the buttons in a row, which the two fr columns then absorbed
+   differently -- "Length" sat 220px right of the lengths. Fixed width keeps
+   the two in step; it fits "Make private  Rename  Delete", the widest set. */
+.list .cols, .list .row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) 72px 128px 224px; gap: 16px; align-items: center; padding: 14px 18px; }
 .list .cols { font-weight: 600; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; padding: 11px 18px; border-bottom: 1px solid var(--rule); background: var(--paper-2); }
 .list .row { border-bottom: 1px solid var(--rule-soft); transition: background .1s; }
 .list .row:last-child { border-bottom: 0; }
@@ -188,6 +194,12 @@ input[type=number]:focus { border-color: var(--action); box-shadow: 0 0 0 3px va
 .list .cell { min-width: 0; }
 .title-cell { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
 .avatar { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--c); color: #fff; font: 600 13px var(--sans); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.title-main { min-width: 0; }
+/* Name and chips as one wrapping flex line: inline chips with their own
+   margins wrapped raggedly, which made a row with two chips a line taller
+   than its neighbours and the spacing between chips uneven. */
+.title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.title-line .chip-sum, .title-line .chip-pub { margin-left: 0; vertical-align: baseline; }
 .title-cell .name { font: 600 15.5px/1.3 var(--serif); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
 .title-cell .name:hover { color: var(--action); }
 .title-cell .when { color: var(--muted); font-size: 12px; margin-top: 3px; }
@@ -255,6 +267,35 @@ main:has(.player) .key { max-height: calc(100vh - 156px); }  /* leave room for t
 .stream-head .find svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--faint); pointer-events: none; }
 .stream-head .find input { padding: 6px 10px 6px 30px; font-size: 13.5px; }
 .stream-head .find .hits { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; }
+/* ---- tabs over the transcript, and the "what changed" record ---- */
+.stream-head .tabs { display: flex; gap: 2px; flex: none; }
+.stream-head .tab { font: 600 15px/1 var(--serif); color: var(--muted); background: none; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.stream-head .tab:hover { color: var(--ink); background: var(--paper-2); }
+.stream-head .tab.on { color: var(--ink); background: var(--action-soft); }
+.stream-head .tab .n { font: 600 11.5px var(--sans); color: var(--action); background: var(--paper); border: 1px solid var(--action-rule); border-radius: 999px; padding: 0 6px; }
+.stream-head .tab .n:empty { display: none; }
+.changes { padding: 0 0 14px; }
+.chg-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 14px 18px 10px; border-bottom: 1px solid var(--rule-soft); }
+.chg-top b { font: 600 15px var(--serif); }
+.chg-sec { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 0; padding: 0 18px; display: flex; align-items: center; gap: 8px; }
+.chg-sec .n { font-size: 11.5px; color: var(--faint); background: var(--page); border: 1px solid var(--rule); border-radius: 999px; padding: 0 6px; letter-spacing: 0; }
+.chg-note { padding: 6px 18px 0; max-width: 68ch; }
+.chg-note code { font-size: 12px; }
+.chg-empty { padding: 16px 18px; }
+.chg { padding: 12px 18px; border-bottom: 1px solid var(--rule-soft); }
+.chg:last-child { border-bottom: 0; }
+.chg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12.5px; flex-wrap: wrap; }
+.chg-head > a { color: var(--muted); font-variant-numeric: tabular-nums; text-decoration: none; }
+.chg-head > a:hover { color: var(--action); text-decoration: underline; }
+.chg-who { font-weight: 600; color: var(--c, var(--ink)); }
+.chg-head .all { color: var(--faint); }
+.chg-tag { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 1px 7px; color: var(--muted); background: var(--page); border: 1px solid var(--rule); }
+.chg-tag.fix { color: var(--action); background: var(--action-soft); border-color: var(--action-rule); }
+.chg-body { font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.chg-body del { text-decoration: none; color: var(--bad); background: var(--bad-bg); border-radius: 3px; padding: 0 1px; text-decoration-line: line-through; text-decoration-thickness: 1px; }
+.chg-body ins { text-decoration: none; color: var(--good); background: var(--good-bg); border-radius: 3px; padding: 0 1px; }
+.chg-what { font-weight: 500; }
+.chg-kept { margin: 8px 0 0; padding: 0 18px 0 34px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
 .stream { background: var(--paper); border: 1px solid var(--rule); border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow-sm); padding: 8px 0 14px; }
 
 /* An utterance: icon | time | (name, text). The name control and the text
