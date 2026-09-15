@@ -70,11 +70,31 @@ def meeting_path(mid: str) -> Path:
     return meeting_dir(mid) / "meeting.json"
 
 
+class Gone(Exception):
+    """The meeting a pass was working on is no longer there: it was deleted,
+    or deleted and replaced by a new meeting that took the same id (dropping
+    the same recording in again does exactly that). A pass that keeps writing
+    after this would land its results on the new meeting."""
+
+
 def load(mid: str) -> dict:
     p = meeting_path(mid)
     if not p.exists():
         raise FileNotFoundError(mid)
     return json.loads(p.read_text())
+
+
+def reload_same(mid: str, created: float | None) -> dict:
+    """Load a meeting a long pass started on, and check it is still the same
+    one. `created` never changes for a given record, so it tells a re-created
+    meeting from the original even though both hold the same id."""
+    try:
+        m = load(mid)
+    except FileNotFoundError:
+        raise Gone(mid) from None
+    if created is not None and m.get("created") != created:
+        raise Gone(mid)
+    return m
 
 
 _write_lock = threading.RLock()
@@ -94,12 +114,13 @@ def save(meeting: dict) -> dict:
     return meeting
 
 
-def modify(mid: str, fn) -> dict:
+def modify(mid: str, fn, created: float | None = None) -> dict:
     """Read-modify-write under the lock, so two passes updating different
     fields of the same meeting can't overwrite each other. `fn(meeting)`
-    edits in place."""
+    edits in place. Pass `created` from a long pass to have the write raise
+    Gone rather than land on a meeting that replaced the one it started on."""
     with _write_lock:
-        m = load(mid)
+        m = reload_same(mid, created)
         fn(m)
         return save(m)
 

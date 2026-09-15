@@ -14,6 +14,15 @@ _in_flight: set[str] = set()
 _lock = threading.Lock()
 
 
+def running(mid: str) -> bool:
+    """Whether a pass in this process currently holds this meeting. The web
+    server and the CLI are separate processes, so this is a courtesy check
+    for a clear message; the `created` stamp is what actually keeps a run
+    off a meeting that replaced the one it started on."""
+    with _lock:
+        return mid in _in_flight
+
+
 def log(msg: str) -> None:
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
@@ -58,6 +67,7 @@ def process_meeting(mid: str) -> dict:
         _in_flight.add(mid)
     try:
         m = store.load(mid)
+        stamp = m.get("created")   # this run belongs to this record, not just this id
         audio = store.meeting_dir(mid) / m["audio"]
         if not audio.is_file():
             raise FileNotFoundError(f"the recording {m['audio']} was deleted, so this meeting "
@@ -87,7 +97,7 @@ def process_meeting(mid: str) -> dict:
         labels = sorted({u["speaker"] for u in utterances})
         store.save_words(mid, aai.words_from(t))
         heard = aai.people_from(t)
-        m = store.load(mid)
+        m = store.reload_same(mid, stamp)
         m["utterances"] = utterances
         m["duration_ms"] = (t.get("audio_duration") or 0) * 1000
         m["heard_names"] = heard
@@ -104,22 +114,32 @@ def process_meeting(mid: str) -> dict:
         except Exception as e:  # naming is best-effort
             log(f"[{mid}] name guessing failed: {e}")
             guesses = {}
-        m = store.load(mid)
+        m = store.reload_same(mid, stamp)
         m["naming"] = guesses.pop("_notes", None)
         for label, g in guesses.items():
             m["speakers"].setdefault(label, {}).update(g)
         m["status"] = "ready"
         m["error"] = None
         store.save(m)
-        tidy(mid)
-        m = store.load(mid)
+        tidy(mid, created=stamp)
+        m = store.reload_same(mid, stamp)
         export.write(m, "md")
         log(f"[{mid}] ready")
-        suggest_repairs(mid)
+        suggest_repairs(mid, created=stamp)
         return store.load(mid)
+    except store.Gone:
+        # Deleted, or deleted and replaced by a new meeting with the same id,
+        # while this was running. Stop quietly: writing any of it now would
+        # land on the new meeting, and marking an error would resurrect the
+        # old one.
+        log(f"[{mid}] deleted while it was being transcribed; stopping")
+        return {"id": mid, "status": "deleted"}
     except Exception as e:
         log(f"[{mid}] error: {e}")
-        store.set_status(mid, "error", error=str(e))
+        try:
+            store.set_status(mid, "error", error=str(e))
+        except (FileNotFoundError, store.Gone):
+            pass          # deleted on the way out; nothing left to mark
         raise
     finally:
         with _lock:
@@ -153,7 +173,7 @@ def reguess(mid: str) -> dict:
     return store.load(mid)
 
 
-def tidy(mid: str) -> dict:
+def tidy(mid: str, created: float | None = None) -> dict:
     """The cleanup pass: fillers, false starts and punctuation, with the
     verbatim text kept beside every line it touches. Best effort, like the
     naming pass -- a failure leaves the transcript exactly as recorded.
@@ -164,21 +184,23 @@ def tidy(mid: str) -> dict:
     if os.environ.get("CLEANUP") == "0":
         return {"status": "skipped"}
     store.modify(mid, lambda m: m.__setitem__(
-        "cleanup", {"status": "running", "created": time.time()}))
+        "cleanup", {"status": "running", "created": time.time()}), created=created)
     try:
-        block = cleanup.run(mid)
+        block = cleanup.run(mid, created=created)
+    except store.Gone:
+        raise
     except Exception as e:
         log(f"[{mid}] cleanup failed: {e}")
         block = {"status": "error", "error": str(e), "created": time.time()}
         # store.modify hands back the meeting; the caller wants the block.
-        store.modify(mid, lambda m: m.__setitem__("cleanup", block))
+        store.modify(mid, lambda m: m.__setitem__("cleanup", block), created=created)
         return block
     log(f"[{mid}] tidied {block['changed']} of {block['lines']} lines"
         + (f", {block['refused']} left as recorded" if block["refused"] else ""))
     return block
 
 
-def suggest_repairs(mid: str) -> dict:
+def suggest_repairs(mid: str, created: float | None = None) -> dict:
     """The review pass: Claude proposes line and name fixes for a person to
     apply. Best effort; a failure leaves the transcript as it is.
 
@@ -186,14 +208,17 @@ def suggest_repairs(mid: str) -> dict:
     looks under its "repairs" block to see how the pass went."""
     # Marked running first, so a restart knows to pick this up again.
     m = store.modify(mid, lambda m: m.__setitem__(
-        "repairs", {"status": "running", "created": time.time(), "items": []}))
+        "repairs", {"status": "running", "created": time.time(), "items": []}), created=created)
     try:
         block = repair.propose(m)
+    except store.Gone:
+        raise
     except Exception as e:
         log(f"[{mid}] repair suggestions failed: {e}")
         return store.modify(mid, lambda m: m.__setitem__(
-            "repairs", {"status": "error", "error": str(e), "created": time.time(), "items": []}))
-    m = store.modify(mid, lambda m: m.__setitem__("repairs", block))
+            "repairs", {"status": "error", "error": str(e), "created": time.time(), "items": []}),
+            created=created)
+    m = store.modify(mid, lambda m: m.__setitem__("repairs", block), created=created)
     n = len(block["items"])
     log(f"[{mid}] {n} fix{'es' if n != 1 else ''} suggested" if n else f"[{mid}] no fixes suggested")
     return m

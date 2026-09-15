@@ -201,7 +201,10 @@ def api_retry(mid: str):
 
 @app.delete("/api/meetings/{mid}")
 def api_delete(mid: str):
-    _meeting_or_404(mid)
+    m = _meeting_or_404(mid)
+    if pipeline.running(mid):
+        raise HTTPException(409, f"{m.get('title') or mid} is still being transcribed. "
+                                 "Wait for it to finish, then delete it.")
     store.delete_meeting(mid)
     return {"ok": True}
 

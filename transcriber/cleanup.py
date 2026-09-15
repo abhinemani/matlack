@@ -169,11 +169,14 @@ def clean_batch(client, model: str, lines: list[tuple[int, str]]) -> dict[int, s
     return out
 
 
-def run(mid: str) -> dict:
+def run(mid: str, created: float | None = None) -> dict:
     """Clean every line of a transcript. Safe to run again: a line already
     cleaned keeps its original in "raw", so a second pass compares against
-    the same starting point."""
-    m = store.load(mid)
+    the same starting point.
+
+    `created` is the record the caller started on: pass it and the writes
+    stop rather than land on a meeting that replaced it mid-run."""
+    m = store.reload_same(mid, created)
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set (put it in .env)")
     if not m.get("utterances"):
@@ -210,13 +213,13 @@ def run(mid: str) -> dict:
                     u = mm["utterances"][i]
                     u.setdefault("raw", u["text"])
                     u["text"] = new
-            store.modify(mid, apply)
+            store.modify(mid, apply, created=created)
             changed += len(edits)
 
     block = {"status": "done", "model": model, "effort": EFFORT,
              "created": time.time(), "lines": len(source),
              "changed": changed, "refused": refused, "notes": notes}
-    store.modify(mid, lambda mm: mm.__setitem__("cleanup", block))
+    store.modify(mid, lambda mm: mm.__setitem__("cleanup", block), created=created)
     return block
 
 
