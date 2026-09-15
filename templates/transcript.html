@@ -304,6 +304,16 @@ function highlight(text) {
   return out + esc(text.slice(i));
 }
 
+function emptyNote() {
+  // A search that found nothing is one thing; a meeting that is finished but
+  // has no lines at all is another, and saying "no lines match" for it reads
+  // as a broken search. (A meeting still being transcribed never gets here:
+  // the page shows the working view instead.)
+  if (meeting.utterances.length) return `<p class="none">No lines match “${esc(query)}”.</p>`;
+  return `<p class="none">This meeting has no transcript. The recording is still here, so
+    <code>python transcribe.py retry ${esc(meeting.id)}</code> can transcribe it again.</p>`;
+}
+
 function renderStream() {
   const labels = Object.keys(meeting.speakers).sort();
   const q = query.toLowerCase();
@@ -323,7 +333,7 @@ function renderStream() {
       </div>
     </div>`;
   }).join('');
-  document.getElementById('stream').innerHTML = html + (shown ? '' : `<p class="none">No lines match “${esc(query)}”.</p>`);
+  document.getElementById('stream').innerHTML = html + (shown ? '' : emptyNote());
   document.getElementById('lineCount').textContent = q ? `${shown} of ${meeting.utterances.length}` : `${meeting.utterances.length} lines`;
   document.getElementById('hits').textContent = q ? `${shown}` : '';
 }
