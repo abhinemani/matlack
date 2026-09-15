@@ -88,6 +88,8 @@ def write(meeting: dict, fmt: str = "md") -> Path:
         p.write_text(to_text(meeting))
     elif fmt == "docx":
         p = to_docx(meeting, d / f"{meeting['id']}.docx")
+    elif fmt == "pdf":
+        p = to_pdf(meeting, d / f"{meeting['id']}.pdf")
     else:
         raise ValueError(f"unknown format {fmt}")
     return p
@@ -200,6 +202,130 @@ def write_summary(meeting: dict, fmt: str = "md") -> Path:
         p.write_text(summary_to_markdown(meeting))
     elif fmt == "docx":
         p = summary_to_docx(meeting, d / f"{meeting['id']}-summary.docx")
+    elif fmt == "pdf":
+        p = summary_to_pdf(meeting, d / f"{meeting['id']}-summary.pdf")
     else:
         raise ValueError(f"unknown format {fmt}")
     return p
+
+
+# --- pdf ---------------------------------------------------------------------
+def _pdf_styles():
+    """Paragraph styles for the PDF exports, close to what the Word ones look
+    like: a plain serif body, grey italic questions, indented quotes."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+
+    ss = getSampleStyleSheet()
+    grey = colors.HexColor("#666E72")
+    st = {
+        "title": ParagraphStyle("t", parent=ss["Title"], fontSize=18, leading=22,
+                                alignment=TA_LEFT, spaceAfter=4),
+        "subtitle": ParagraphStyle("st", parent=ss["Normal"], fontName="Times-Italic",
+                                   fontSize=11, textColor=grey, spaceAfter=10),
+        "meta": ParagraphStyle("m", parent=ss["Normal"], fontSize=9, textColor=grey,
+                               spaceAfter=3),
+        "h1": ParagraphStyle("h1", parent=ss["Heading1"], fontSize=13, leading=16,
+                             spaceBefore=14, spaceAfter=4),
+        "body": ParagraphStyle("b", parent=ss["Normal"], fontName="Times-Roman",
+                               fontSize=10.5, leading=15, spaceAfter=6),
+        "question": ParagraphStyle("q", parent=ss["Normal"], fontName="Times-Italic",
+                                   fontSize=10, leading=14, textColor=grey, spaceAfter=6),
+        "bullet": ParagraphStyle("li", parent=ss["Normal"], fontName="Times-Roman",
+                                 fontSize=10.5, leading=15, leftIndent=14,
+                                 bulletIndent=4, spaceAfter=3),
+        "quote": ParagraphStyle("qt", parent=ss["Normal"], fontName="Times-Italic",
+                                fontSize=10, leading=14, leftIndent=18,
+                                borderPadding=0, spaceBefore=4, spaceAfter=6),
+        "speaker": ParagraphStyle("sp", parent=ss["Normal"], fontName="Times-Bold",
+                                  fontSize=10.5, leading=15, spaceBefore=8, spaceAfter=1),
+    }
+    return st
+
+
+def _esc(text: str) -> str:
+    """reportlab reads paragraph text as mini-HTML, so the transcript's own
+    angle brackets and ampersands have to be escaped."""
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def _pdf_doc(path: Path, title: str):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate
+
+    return SimpleDocTemplate(
+        str(path), pagesize=letter,
+        leftMargin=0.9 * inch, rightMargin=0.9 * inch,
+        topMargin=0.9 * inch, bottomMargin=0.9 * inch,
+        title=title, author="Meeting transcriber",
+    )
+
+
+def to_pdf(meeting: dict, path: Path) -> Path:
+    from reportlab.platypus import Paragraph, Spacer
+
+    st = _pdf_styles()
+    flow = [Paragraph(_esc(meeting["title"]), st["title"])]
+    key = _speaker_key(meeting)
+    if key:
+        flow.append(Paragraph("<b>Speakers:</b> " + _esc("; ".join(key)), st["meta"]))
+    flow.append(Spacer(1, 8))
+    for b in _blocks(meeting):
+        flow.append(Paragraph(
+            f"{_esc(b['name'])} <font size=8 color='#666E72'>({store.fmt_ts(b['start'])})</font>",
+            st["speaker"]))
+        flow.append(Paragraph(_esc(b["text"]), st["body"]))
+    _pdf_doc(path, meeting["title"]).build(flow)
+    return path
+
+
+def summary_to_pdf(meeting: dict, path: Path) -> Path:
+    from reportlab.platypus import Paragraph, Spacer
+
+    s = meeting.get("summary") or {}
+    if s.get("status") != "ready":
+        raise ValueError("no summary yet")
+    st = _pdf_styles()
+    flow = [Paragraph(_esc(meeting["title"]), st["title"]),
+            Paragraph(_esc(s.get("guide_title", "Summary")), st["subtitle"])]
+    key = _speaker_key(meeting)
+    if key:
+        flow.append(Paragraph("<b>Speakers:</b> " + _esc("; ".join(key)), st["meta"]))
+    if s.get("created"):
+        flow.append(Paragraph("Summarized " + _fmt_date(s["created"]), st["meta"]))
+    flow.append(Spacer(1, 6))
+
+    if s.get("overview"):
+        flow.append(Paragraph("Overview", st["h1"]))
+        flow.append(Paragraph(_esc(s["overview"]), st["body"]))
+    if s.get("priorities"):
+        flow.append(Paragraph("Top priorities", st["h1"]))
+        for i, p in enumerate(s["priorities"], 1):
+            flow.append(Paragraph(_esc(p), st["bullet"], bulletText=f"{i}."))
+    for sec in s.get("sections", []):
+        flow.append(Paragraph(_esc(sec["title"]), st["h1"]))
+        flow.append(Paragraph(_esc(sec["question"]), st["question"]))
+        if not sec.get("covered") and not sec.get("summary"):
+            flow.append(Paragraph("Not discussed.", st["question"]))
+            continue
+        if sec.get("summary"):
+            flow.append(Paragraph(_esc(sec["summary"]), st["body"]))
+        for p in sec.get("points", []):
+            flow.append(Paragraph(_esc(p), st["bullet"], bulletText="•"))
+        for q in sec.get("quotes", []):
+            tail = ""
+            if q.get("speaker"):
+                tail += f" — {q['speaker']}"
+            if q.get("time"):
+                tail += f" ({q['time']})"
+            flow.append(Paragraph(
+                f"“{_esc(q['text'])}”<font size=8 color='#666E72'>{_esc(tail)}</font>",
+                st["quote"]))
+    if s.get("follow_ups"):
+        flow.append(Paragraph("Follow-ups", st["h1"]))
+        for p in s["follow_ups"]:
+            flow.append(Paragraph(_esc(p), st["bullet"], bulletText="•"))
+    _pdf_doc(path, meeting["title"]).build(flow)
+    return path

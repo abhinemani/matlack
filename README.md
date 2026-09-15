@@ -59,7 +59,7 @@ Fixing speakers from the command line:
     python transcribe.py reassign budget-kickoff 42 A # one line went to the wrong person
     python transcribe.py clean budget-kickoff         # tidy the text (runs automatically too)
     python transcribe.py clean budget-kickoff --undo  # back to what was recorded
-    python transcribe.py export budget-kickoff --format docx
+    python transcribe.py export budget-kickoff --format docx  # or md, txt, pdf
 
 ## Names that keep coming out wrong
 
@@ -108,6 +108,7 @@ cleaned up, with the interviewee's own quotes and timestamps.
 
     python transcribe.py summarize frederick-budget-director
     python transcribe.py export frederick-budget-director --summary --format docx
+    python transcribe.py export frederick-budget-director --summary --format pdf
 
 The questions live in `guides/efficiency-review.md`. Each `## Section` is one
 question: the first line is the question itself and `- ` bullets are the
