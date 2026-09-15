@@ -16,7 +16,7 @@
   python transcribe.py export <id> --format docx
   python transcribe.py summarize <id>           # organized summary following guides/efficiency-review.md
   python transcribe.py summarize <id> --guide other-guide
-  python transcribe.py export <id> --summary --format docx
+  python transcribe.py export <id> --summary --format docx   (or pdf)
   python transcribe.py guides                   # list interview guides
   python transcribe.py spellings                # check spellings.txt (names to always spell one way)
   python transcribe.py clean <id>               # tidy the text (fillers, false starts); --undo puts it back
@@ -189,7 +189,7 @@ def cmd_export(a):
     m = store.load(a.id)
     if a.summary:
         if a.format == "txt":
-            sys.exit("summaries export as md or docx")
+            sys.exit("summaries export as md, docx or pdf")
         p = export.write_summary(m, a.format)
     else:
         p = export.write(m, a.format)
@@ -420,7 +420,7 @@ def main(argv=None):
     s.add_argument("label"); s.set_defaults(fn=cmd_reassign)
 
     s = sub.add_parser("export"); s.add_argument("id")
-    s.add_argument("--format", choices=["md", "txt", "docx"], default="md")
+    s.add_argument("--format", choices=["md", "txt", "docx", "pdf"], default="md")
     s.add_argument("--summary", action="store_true", help="export the summary instead of the transcript")
     s.set_defaults(fn=cmd_export)
 
